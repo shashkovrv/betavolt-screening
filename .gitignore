@@ -1,0 +1,19 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Environments
+.env
+venv/
+.venv/
+
+# Heavy raw / intermediate caches (keep SQLite DB in 05_database)
+data/01_raw/
+data/02_intermediate/
+data/03_features/
+
+# Models & Jupyter
+models/*.cbm
+models/*.joblib
+.ipynb_checkpoints/
+

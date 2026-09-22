@@ -1,0 +1,23 @@
+# Работа с данными и квантовыми базами
+mp-api
+pymatgen
+matminer
+
+# Таблицы и быстрые форматы
+pandas
+numpy
+pyarrow
+
+# Машинное обучение и анализ
+scikit-learn
+catboost
+shap
+
+# Визуализация и интерфейс
+plotly
+streamlit
+
+# Инженерия и тесты
+python-dotenv
+pyyaml
+pytest

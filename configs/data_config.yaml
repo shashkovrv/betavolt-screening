@@ -1,0 +1,23 @@
+# Параметры скрининга для бетавольтаики
+screening_filters:
+  # Ищем полупроводники и широкозонники (эВ)
+  min_band_gap: 1.0
+  max_band_gap: 6.0
+
+  # Термодинамическая стабильность: энергия над конвексом (эВ/атом)
+  max_energy_above_hull: 0.05
+
+# Список полей, которые мы забираем из базы
+requested_fields:
+  - material_id
+  - formula_pretty
+  - composition
+  - band_gap
+  - density
+  - volume
+  - energy_above_hull
+  - symmetry
+  - formation_energy_per_atom
+
+# Пути сохранения
+output_raw_path: "data/01_raw/materials_raw.parquet"

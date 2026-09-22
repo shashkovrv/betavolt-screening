@@ -1,0 +1,7 @@
+{
+  "dataset_size": 683,
+  "num_features": 132,
+  "catboost_mae_cv": 0.5555,
+  "catboost_r2_cv": 0.2932,
+  "dummy_mae_cv": 0.7021
+}

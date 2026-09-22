@@ -1,0 +1,27 @@
+model_training:
+  algorithm: "CatBoostRegressor"
+  hyperparameters:
+    iterations: 800
+    learning_rate: 0.03
+    depth: 5
+    l2_leaf_reg: 4.0
+    random_seed: 42
+    loss_function: "RMSE"
+    eval_metric: "MAE"
+
+validation:
+  cv_folds: 5
+  group_column: "chem_family"
+  metrics:
+    - "MAE"
+    - "RMSE"
+    - "R2"
+
+features:
+  physical_baseline:
+    - "band_gap_dft"
+    - "density"
+    - "volume"
+  compositional:
+    preset: "magpie"
+    num_features: 132

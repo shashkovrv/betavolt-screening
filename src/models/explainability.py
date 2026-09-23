@@ -99,10 +99,8 @@ def run_explainability_analysis(
     ).drop_duplicates(subset=["clean_formula"]).reset_index(drop=True)
 
     X = train_df[all_feature_cols]
-    print(f"Анализируем влияние признаков на выборке из {len(X)} экспериментальных материалов...")
 
     # 3. Инициализация SHAP TreeExplainer для CatBoost
-    print("Вычисление значений Шепли (SHAP values)...")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
 
@@ -114,18 +112,23 @@ def run_explainability_analysis(
     os.makedirs(os.path.dirname(output_summary_path), exist_ok=True)
 
     # 4. График 1: SHAP Beeswarm Plot (Влияние величины признака на прогноз)
-    print("Построение Beeswarm-графика распределения SHAP...")
     plt.figure(figsize=(11, 7))
     shap.summary_plot(shap_values, X_ru, show=False, max_display=12)
     plt.title("Влияние дескрипторов на калибровку запрещенной зоны (SHAP)", fontsize=13, pad=15)
     plt.xlabel("Влияние на значение поправки $\\Delta E_g$, эВ", fontsize=11)
+    
+    # Русификация шкалы цветовой легенды (Colorbar)
+    fig = plt.gcf()
+    for ax in fig.axes:
+        if ax.get_ylabel() == "Feature value":
+            ax.set_ylabel("Величина дескриптора", fontsize=11)
+            ax.set_yticklabels(["Низкая", "Высокая"])
+
     plt.tight_layout()
     plt.savefig(output_summary_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"График сохранен в: {output_summary_path}")
 
     # 5. График 2: Bar Plot абсолютной важности
-    print("Построение графика глобальной важности признаков...")
     plt.figure(figsize=(10, 6))
     shap.summary_plot(shap_values, X_ru, plot_type="bar", show=False, max_display=12)
     plt.title("Топ-12 наиболее значимых дескрипторов", fontsize=13, pad=15)
@@ -133,7 +136,6 @@ def run_explainability_analysis(
     plt.tight_layout()
     plt.savefig(output_bar_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"График сохранен в: {output_bar_path}")
 
     print("Анализ объяснимости успешно завершен!")
 

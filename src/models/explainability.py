@@ -12,6 +12,60 @@ import pandas as pd
 import shap
 from catboost import CatBoostRegressor
 
+# Словарь перевода базовых дескрипторов
+BASE_TRANSLATION = {
+    "band_gap_dft": "Ширина зоны DFT (эВ)",
+    "density": "Плотность структуры (г/см³)",
+    "volume": "Объем ячейки (Å³)",
+}
+
+STAT_TRANSLATION = {
+    "mean": "Ср.",
+    "avg_dev": "Ср. откл.",
+    "range": "Диапазон",
+    "maximum": "Макс.",
+    "minimum": "Мин.",
+    "mode": "Мода",
+}
+
+PROP_TRANSLATION = {
+    "Number": "атомного номера",
+    "MendeleevNumber": "числа Менделеева",
+    "AtomicWeight": "атомной массы",
+    "MeltingT": "темп. плавления",
+    "Column": "номера группы",
+    "Row": "номера периода",
+    "CovalentRadius": "ковалентного радиуса",
+    "Electronegativity": "электроотрицательности",
+    "NsValence": "числа s-электронов",
+    "NpValence": "числа p-электронов",
+    "NdValence": "числа d-электронов",
+    "NfValence": "числа f-электронов",
+    "NValence": "валентных электронов",
+    "NsUnfilled": "незаполненных s-орбиталей",
+    "NpUnfilled": "незаполненных p-орбиталей",
+    "NdUnfilled": "незаполненных d-орбиталей",
+    "NfUnfilled": "незаполненных f-орбиталей",
+    "NUnfilled": "незаполненных орбиталей",
+    "GSvolume_pa": "объема на атом",
+    "GSbandgap": "Eg основного состояния",
+    "GSmagmom": "магнитного момента",
+    "SpaceGroupNumber": "номера простр. группы",
+}
+
+
+def translate_feature_name(col: str) -> str:
+    if col in BASE_TRANSLATION:
+        return BASE_TRANSLATION[col]
+    if col.startswith("MagpieData "):
+        parts = col.replace("MagpieData ", "").split(" ", 1)
+        if len(parts) == 2:
+            stat, prop = parts[0], parts[1]
+            stat_ru = STAT_TRANSLATION.get(stat, stat)
+            prop_ru = PROP_TRANSLATION.get(prop, prop)
+            return f"{stat_ru} {prop_ru}"
+    return col
+
 
 def run_explainability_analysis(
     features_path: str = "data/03_features/materials_features.parquet",
@@ -20,7 +74,7 @@ def run_explainability_analysis(
     output_summary_path: str = "reports/figures/shap_summary.png",
     output_bar_path: str = "reports/figures/shap_importance_bar.png"
 ):
-    print(" Запуск анализа объяснимости модели (XAI / SHAP Analysis)...")
+    print("Запуск анализа объяснимости модели (XAI / SHAP Analysis)...")
 
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Файл модели {model_path} не найден! Сначала запусти delta_learner.py.")
@@ -45,46 +99,43 @@ def run_explainability_analysis(
     ).drop_duplicates(subset=["clean_formula"]).reset_index(drop=True)
 
     X = train_df[all_feature_cols]
-    print(f"  Анализируем влияние признаков на выборке из {len(X)} экспериментальных материалов...")
+    print(f"Анализируем влияние признаков на выборке из {len(X)} экспериментальных материалов...")
 
     # 3. Инициализация SHAP TreeExplainer для CatBoost
-    print("  Вычисление значений Шепли (SHAP values)...")
+    print("Вычисление значений Шепли (SHAP values)...")
     explainer = shap.TreeExplainer(model)
     shap_values = explainer.shap_values(X)
+
+    # Переводим имена колонок в датафрейме для аккуратных графиков
+    ru_cols = [translate_feature_name(c) for c in all_feature_cols]
+    X_ru = X.copy()
+    X_ru.columns = ru_cols
 
     os.makedirs(os.path.dirname(output_summary_path), exist_ok=True)
 
     # 4. График 1: SHAP Beeswarm Plot (Влияние величины признака на прогноз)
-    print("  [1/2] Построение Beeswarm-графика распределения SHAP...")
+    print("Построение Beeswarm-графика распределения SHAP...")
     plt.figure(figsize=(11, 7))
-    shap.summary_plot(shap_values, X, show=False, max_display=12)
-    plt.title("SHAP Beeswarm: Влияние дескрипторов на калибровку запрещенной зоны", fontsize=12, pad=15)
+    shap.summary_plot(shap_values, X_ru, show=False, max_display=12)
+    plt.title("Влияние дескрипторов на калибровку запрещенной зоны (SHAP)", fontsize=13, pad=15)
+    plt.xlabel("Влияние на значение поправки $\\Delta E_g$, эВ", fontsize=11)
     plt.tight_layout()
     plt.savefig(output_summary_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"  ✓ График сохранен в: {output_summary_path}")
+    print(f"График сохранен в: {output_summary_path}")
 
     # 5. График 2: Bar Plot абсолютной важности
-    print("  [2/2] Построение графика глобальной важности признаков...")
+    print("Построение графика глобальной важности признаков...")
     plt.figure(figsize=(10, 6))
-    shap.summary_plot(shap_values, X, plot_type="bar", show=False, max_display=12)
-    plt.title("Топ-12 наиболее значимых дескрипторов (Mean |SHAP value|)", fontsize=12, pad=15)
+    shap.summary_plot(shap_values, X_ru, plot_type="bar", show=False, max_display=12)
+    plt.title("Топ-12 наиболее значимых дескрипторов", fontsize=13, pad=15)
+    plt.xlabel("Среднее абсолютное влияние на модель (эВ)", fontsize=11)
     plt.tight_layout()
     plt.savefig(output_bar_path, dpi=300, bbox_inches="tight")
     plt.close()
-    print(f"  ✓ График сохранен в: {output_bar_path}")
+    print(f"График сохранен в: {output_bar_path}")
 
-    # 6. Аналитический вывод в консоль
-    mean_abs_shap = pd.Series(abs(shap_values).mean(axis=0), index=all_feature_cols).sort_values(ascending=False)
-    
-    print("\n" + "=" * 65)
-    print("  ФИЗИЧЕСКАЯ ИНТЕРПРЕТАЦИЯ ДЛЯ ГЛАВЫ 2 ДИПЛОМА:")
-    print("=" * 65)
-    print("Топ-5 ключевых факторов, определяющих величину поправки:")
-    for i, (feat, val) in enumerate(mean_abs_shap.head(5).items(), 1):
-        print(f"  {i}. {feat:<35} | Среднее влияние: {val:.4f} эВ")
-    print("=" * 65 + "\n")
-    print(" Анализ объяснимости успешно завершен!")
+    print("Анализ объяснимости успешно завершен!")
 
 
 if __name__ == "__main__":

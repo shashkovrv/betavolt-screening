@@ -13,7 +13,7 @@ CRYSTAL_SYSTEMS_RU = {
 }
 
 
-def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: str, show_pareto: bool = True):
+def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: str):
     """Строит интерактивный 2D график Парето-скрининга на русском языке."""
     clean_tag = isotope.replace("-", "")
     depth_col = f"penetration_depth_um_{clean_tag}"
@@ -61,8 +61,8 @@ def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: 
                       "ID: %{customdata[5]}<extra></extra>"
     )
 
-    # Добавляем Парето-чемпионов при включенном тумблере
-    if show_pareto and not pareto_df.empty:
+    # Добавляем Парето-чемпионов (их можно включить/выключить кликом по легенде графика)
+    if not pareto_df.empty:
         p_df = pareto_df.copy()
         p_df["Сингония"] = p_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(p_df["crystal_system"])
         p_df["Глубина пробега (мкм)"] = p_df[depth_col].round(2) if depth_col in p_df.columns else 0.0
@@ -76,14 +76,14 @@ def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: 
                 textposition="top center",
                 textfont=dict(size=12, color="#B22222", family="Arial Black"),
                 marker=dict(
-                    size=15, 
+                    size=14, 
                     color="#FF2A2A", 
                     symbol="star",
                     line=dict(width=1.5, color="#500000")
                 ),
-                name="Парето-чемпионы ⭐",
+                name="Парето-чемпионы (кликните, чтобы скрыть)",
                 customdata=p_df[["formula", "crystal_system", "band_gap_calibrated", "mp_id", "Сингония", "Глубина пробега (мкм)"]],
-                hovertemplate="⭐ <b>Парето-чемпион: %{customdata[0]}</b><br>" +
+                hovertemplate="<b>Парето-чемпион: %{customdata[0]}</b><br>" +
                               "Теор. КПД: %{x:.2f}%<br>" +
                               "Индекс стойкости: %{y:.1f}/100<br>" +
                               "Eg калибр.: %{customdata[2]:.2f} эВ<br>" +
@@ -96,7 +96,14 @@ def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: 
     fig.update_layout(
         template="plotly_white",
         height=580,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        legend=dict(
+            orientation="h", 
+            yanchor="bottom", 
+            y=1.02, 
+            xanchor="right", 
+            x=1,
+            title=None
+        ),
         margin=dict(l=40, r=40, t=70, b=40)
     )
     return fig

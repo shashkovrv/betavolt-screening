@@ -6,6 +6,7 @@ import streamlit as st
 import pandas as pd
 pd.set_option("styler.render.max_elements", 1_000_000)
 from src.screening.ranker import BetavoltaicLibrary
+from src.screening.pareto import identify_pareto_frontier_3d
 from app.plots import plot_pareto_interactive, plot_3d_materials_space, CRYSTAL_SYSTEMS_RU
 
 # Настройка страницы (чистый академический вид без эмодзи)
@@ -129,6 +130,15 @@ if search_formula:
 
 st.sidebar.info(f"Найдено материалов по критериям: **{len(filtered_df)}** из {len(df)}")
 
+# Динамический расчет 3D Парето-чемпионов под текущую фильтрацию и выбранный изотоп
+if not filtered_df.empty:
+    depth_col = f"penetration_depth_um_{clean_tag}"
+    pts = filtered_df[["theoretical_efficiency_pct", "radiation_resistance_score", depth_col]].values
+    pareto_mask = identify_pareto_frontier_3d(pts)
+    active_pareto_df = filtered_df[pareto_mask].sort_values(by="theoretical_efficiency_pct", ascending=False)
+else:
+    active_pareto_df = pd.DataFrame()
+
 # --- Вкладки основного окна ---
 tab1, tab2, tab3, tab4 = st.tabs([
     "Парето-скрининг", 
@@ -143,14 +153,18 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader(f"Карта многокритериального отбора (Изотоп: {selected_isotope})")
     
-    st.plotly_chart(plot_pareto_interactive(filtered_df, pareto_df, selected_isotope), use_container_width=True)
+    st.plotly_chart(plot_pareto_interactive(filtered_df, active_pareto_df, selected_isotope), use_container_width=True)
     
-    with st.expander("Физический смысл и математическая постановка 3D Парето-отбора", expanded=False):
-        st.markdown("""
-        * **Ось X (Теоретический КПД, %)** — предельная эффективность прямого бетавольтаического преобразования (модель Кляйна для генерации пар и предел Шокли-Квиссера–Олсена).
-        * **Ось Y (Радиационная стойкость R_score, %)** — термодинамическая стойкость решетки к дефектообразованию относительно эталонного алмаза ($E_d / E_d^{алмаз} \cdot 100\%$).
-        * **Размер и глубина (Пробег R, мкм)** — толщина слоя полного поглощения энергии бета-электронов по модели Фельдмана (минимизируется для компактности).
-        * **Красные звёздочки (3D Парето-чемпионы)** — недоминируемые решения в трехмерном пространстве $\{\max \eta_{max}, \max R_{score}, \min R\}$. Это позволяет выделить как рекордные по КПД материалы ($\text{BN}, \text{AlN}$), так и ультракомпактные тяжелые полупроводники ($\beta\text{-Ga}_2\text{O}_3, \text{TiO}_2, \text{GaN}$), поглощающие излучение в слое толщиной $\sim 1$ мкм.
+    st.caption(f"Выделено 3D Парето-чемпионов в активной выборке: **{len(active_pareto_df)}** материалов (помечены красными звёздами).")
+
+    with st.expander("Физический смысл и математическая инвариантность 3D Парето-отбора", expanded=False):
+        st.markdown(r"""
+        * **Ось X (Теоретический КПД, %)** — предельная эффективность прямого бетавольтаического преобразования (модель Кляйна для генерации пар и предел Шокли-Квиссера–Олсена). Зависит от ширины зоны $E_g$.
+        * **Ось Y (Радиационная стойкость R_score, %)** — термодинамическая стойкость решетки к дефектообразованию относительно эталонного алмаза ($E_d / E_d^{алмаз} \cdot 100\%$). Зависит от энергии когезии $E_{coh}$ и $E_g$.
+        * **Глубина пробега (Пробег R, мкм)** — толщина слоя полного поглощения энергии бета-электронов по модели Фельдмана: $R = 0.04 \cdot E_\beta^{1.75} / \rho$.
+        * **Почему набор чемпионов инвариантен к изотопу?**  
+          Поскольку для фиксированного изотопа множитель $0.04 \cdot E_\beta^{1.75}$ является положительной константой, минимизация пробега $\min R$ строго эквивалентна максимизации плотности полупроводника $\max \rho$. Монотонное масштабирование не нарушает отношений Парето-доминирования, поэтому качественный список лидеров стабилен, в то время как численные эксплуатационные параметры (толщина слоя $R$ в мкм и генерация пар $N_{pairs}$) пересчитываются строго под выбранный изотоп.
+        * **Красные звёздочки (3D Парето-чемпионы)** — недоминируемые материалы в пространстве $\max \eta_{max}, \max R_{score}, \min R$.
         """)
 
     st.markdown("### Топ-5 рекомендуемых материалов по многокритериальному рангу")
@@ -214,7 +228,7 @@ with tab2:
 # -------------------------------------------------------------
 with tab3:
     st.subheader(f"3D Пространство критериев Парето-оптимизации ({selected_isotope})")
-    st.plotly_chart(plot_3d_materials_space(filtered_df, pareto_df, selected_isotope), use_container_width=True)
+    st.plotly_chart(plot_3d_materials_space(filtered_df, active_pareto_df, selected_isotope), use_container_width=True)
     st.caption("3D-пространство визуализирует фундаментальный компромисс Парето-отбора: максимизацию КПД (ось X), максимизацию радиационной стойкости (ось Y) и минимизацию необходимой толщины кристалла (ось Z).")
 
 # -------------------------------------------------------------

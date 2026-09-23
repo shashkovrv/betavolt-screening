@@ -4,6 +4,7 @@ sys.path.append(str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
 import pandas as pd
+pd.set_option("styler.render.max_elements", 1_000_000)
 from src.screening.ranker import BetavoltaicLibrary
 from app.plots import plot_pareto_interactive, plot_3d_materials_space, CRYSTAL_SYSTEMS_RU
 
@@ -131,7 +132,8 @@ with tab1:
     display_top = filtered_df[top_cols].sort_values("theoretical_efficiency_pct", ascending=False).head(5).copy()
     display_top["crystal_system"] = display_top["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(display_top["crystal_system"])
     display_top = display_top.rename(columns=COLUMN_MAPPING)
-    st.dataframe(display_top.style.format(precision=2), use_container_width=True, hide_index=True)
+    display_top = display_top.round(2)
+    st.dataframe(display_top, use_container_width=True, hide_index=True)
 
 # -------------------------------------------------------------
 # ВКЛАДКА 2: БАЗА МАТЕРИАЛОВ
@@ -142,7 +144,8 @@ with tab2:
     table_df = filtered_df.copy()
     table_df["crystal_system"] = table_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(table_df["crystal_system"])
     table_df = table_df.rename(columns=COLUMN_MAPPING)
-    st.dataframe(table_df.style.format(precision=2), use_container_width=True, height=380, hide_index=True)
+    table_df = table_df.round(2)
+    st.dataframe(table_df, use_container_width=True, height=380, hide_index=True)
     
     csv_data = table_df.to_csv(index=False).encode('utf-8')
     st.download_button(

@@ -116,8 +116,9 @@ def build_database(
             for eg, fe in zip(df["band_gap_calibrated"], df["formation_energy"])
         ]
 
-    min_ed, max_ed = df["ed_est_ev"].min(), df["ed_est_ev"].max()
-    df["radiation_resistance_score"] = ((df["ed_est_ev"] - min_ed) / (max_ed - min_ed)) * 100.0
+    # Нормировка относительно эталонного алмаза (Ed_diamond ≈ 31.53 эВ)
+    ed_diamond = 10.0 + 2.2 * 5.47 + 0.0025 * 3800.0
+    df["radiation_resistance_score"] = (df["ed_est_ev"] / ed_diamond) * 100.0
 
     # 3. Физический расчет бетавольтаики для 4 изотопов на КАЛИБРОВАННОЙ зоне
     print("  [3/5] Физическое моделирование бетавольтаики для 4 изотопов (Ni-63, H-3, C-14, Pm-147)...")

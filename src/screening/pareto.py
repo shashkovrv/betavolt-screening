@@ -12,19 +12,24 @@ import plotly.graph_objects as go
 from src.screening.ranker import BetavoltaicLibrary
 
 
-def identify_pareto_frontier_2d(costs: np.ndarray) -> np.ndarray:
+def identify_pareto_frontier_3d(points: np.ndarray) -> np.ndarray:
     """
-    Находит индексы Парето-оптимальных точек (максимизация обеих осей).
-    costs: массив формы (N, 2), где столбцы [КПД, Стойкость].
+    Находит индексы 3D Парето-оптимальных точек:
+    points: массив формы (N, 3), где столбцы:
+      [0: КПД (максимизация), 1: Радиационная стойкость (максимизация), 2: Глубина пробега R (минимизация)].
     """
-    is_pareto = np.ones(costs.shape[0], dtype=bool)
-    for i, c in enumerate(costs):
+    norm = points.copy()
+    norm[:, 2] = -norm[:, 2]  # Минимизация R -> максимизация -R
+    is_pareto = np.ones(norm.shape[0], dtype=bool)
+    
+    for i, c in enumerate(norm):
         if is_pareto[i]:
-            # Точка i доминируется точкой j, если точка j строго больше по обеим координатам
+            # Точка i доминируется точкой j, если j >= i по всем осям и строго больше хотя бы по одной
             is_pareto[is_pareto] = ~(
-                (costs[is_pareto, 0] <= c[0]) & 
-                (costs[is_pareto, 1] <= c[1]) & 
-                ((costs[is_pareto, 0] < c[0]) | (costs[is_pareto, 1] < c[1]))
+                (norm[is_pareto, 0] <= c[0]) & 
+                (norm[is_pareto, 1] <= c[1]) & 
+                (norm[is_pareto, 2] <= c[2]) & 
+                ((norm[is_pareto, 0] < c[0]) | (norm[is_pareto, 1] < c[1]) | (norm[is_pareto, 2] < c[2]))
             )
             is_pareto[i] = True
     return is_pareto
@@ -34,7 +39,7 @@ def run_pareto_screening(
     output_fig_path: str = "reports/figures/pareto_frontier.html",
     output_csv_path: str = "reports/figures/pareto_champions.csv"
 ):
-    print("  Запуск многокритериального Парето-скрининга...")
+    print("  Запуск трехкритериального (3D) Парето-скрининга...")
 
     # 1. Читаем полную библиотеку через наш API
     lib = BetavoltaicLibrary()
@@ -49,43 +54,45 @@ def run_pareto_screening(
     ].copy().reset_index(drop=True)
     print(f"  Стабильных жизнеспособных полупроводников (Ehull <= 0.01 эВ, Eg 1.0-7.5 эВ): {len(viable_df)}")
 
-    # 3. Вычисляем Парето-фронт по осям [КПД, Радиационная стойкость]
-    points = viable_df[["theoretical_efficiency_pct", "radiation_resistance_score"]].values
-    pareto_mask = identify_pareto_frontier_2d(points)
+    # 3. Вычисляем 3D Парето-фронт по осям [КПД (max), Радиационная стойкость (max), Пробег Ni-63 (min)]
+    points = viable_df[["theoretical_efficiency_pct", "radiation_resistance_score", "penetration_depth_um_Ni63"]].values
+    pareto_mask = identify_pareto_frontier_3d(points)
     
     viable_df["is_pareto"] = pareto_mask
     pareto_df = viable_df[pareto_mask].sort_values(by="theoretical_efficiency_pct", ascending=False)
     
-    print(f"  Выделено Парето-оптимальных чемпионов: {len(pareto_df)} материалов!")
+    print(f"  Выделено 3D Парето-оптимальных чемпионов: {len(pareto_df)} материалов!")
 
     # 4. Сохраняем список чемпионов
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
     cols_to_save = [
         "formula", "mp_id", "crystal_system", "material_class", "density", 
         "band_gap_calibrated", "theoretical_efficiency_pct", 
-        "ed_est_ev", "radiation_resistance_score"
+        "ed_est_ev", "radiation_resistance_score",
+        "penetration_depth_um_Ni63", "carriers_per_electron_Ni63"
     ]
     pareto_df[cols_to_save].to_csv(output_csv_path, index=False)
-    print(f"  Таблица чемпионов сохранена в: {output_csv_path}")
+    print(f"  Таблица 3D чемпионов сохранена в: {output_csv_path}")
 
     # 5. Строим график Парето-фронта
-    print("  Отрисовка графика Парето-фронта для ВКР...")
+    print("  Отрисовка интерактивного графика 3D Парето-скрининга...")
     
-    # Не-Парето точки
     fig = px.scatter(
         viable_df[~viable_df["is_pareto"]],
         x="theoretical_efficiency_pct",
         y="radiation_resistance_score",
         color="band_gap_calibrated",
+        size="density",
         hover_name="formula",
-        hover_data=["mp_id", "crystal_system", "material_class", "density"],
+        hover_data=["mp_id", "crystal_system", "material_class", "density", "penetration_depth_um_Ni63"],
         opacity=0.45,
         labels={
             "theoretical_efficiency_pct": "Теоретический КПД, %",
             "radiation_resistance_score": "Индекс радиационной стойкости (0-100)",
-            "band_gap_calibrated": "Eg калибр. (эВ)"
+            "band_gap_calibrated": "Eg калибр. (эВ)",
+            "density": "Плотность (г/см³)"
         },
-        title="Многокритериальный Парето-скрининг бетавольтаических полупроводников"
+        title="Многокритериальный 3D Парето-скрининг бетавольтаических полупроводников (Ni-63)"
     )
 
     # Парето-чемпионы (яркие красные звезды)
@@ -96,19 +103,19 @@ def run_pareto_screening(
             mode="markers+text",
             text=pareto_df["formula"],
             textposition="top center",
-            marker=dict(size=12, color="red", symbol="star"),
-            name="Парето-фронт (Чемпионы)"
+            marker=dict(size=13, color="red", symbol="star"),
+            name="3D Парето-чемпионы"
         )
     )
 
     fig.update_layout(template="plotly_white", width=1000, height=600)
     
-    # Сохраняем интерактивный HTML и статическую картинку
+    # Сохраняем интерактивный HTML
     fig.write_html(output_fig_path)
     print(f"  График успешно сохранен в: {output_fig_path}")
 
     # Выводим топ Парето чемпионов
-    print("\n ТОП ПАРЕТО-ОПТИМАЛЬНЫХ МАТЕРИАЛОВ:")
+    print("\n ТОП 3D ПАРЕТО-ОПТИМАЛЬНЫХ МАТЕРИАЛОВ:")
     print(pareto_df[cols_to_save].head(10).to_string(index=False))
 
     return pareto_df

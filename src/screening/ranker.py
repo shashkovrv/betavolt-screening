@@ -13,8 +13,14 @@ class BetavoltaicLibrary:
     Программный интерфейс (Python API) к библиотеке бетавольтаических материалов.
     Реализует требования раздела 8.4.5 дипломного плана.
     """
-    def __init__(self, db_path: str = "data/05_database/betavoltaic_library.db"):
-        self.db_path = db_path
+    def __init__(self, db_path: str = None):
+        if db_path is None:
+            project_root = Path(__file__).resolve().parents[2]
+            default_path = project_root / "data" / "05_database" / "betavoltaic_library.db"
+            self.db_path = str(default_path) if default_path.exists() else "data/05_database/betavoltaic_library.db"
+        else:
+            self.db_path = db_path
+
         if not Path(self.db_path).exists():
             raise FileNotFoundError(f"База данных {self.db_path} не найдена! Сначала запусти repository.py.")
 

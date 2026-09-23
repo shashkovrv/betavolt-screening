@@ -1,0 +1,15 @@
+# Полный стек для извлечения данных из Materials Project и переобучения моделей
+mp-api
+pymatgen
+matminer
+pandas
+numpy
+pyarrow
+scikit-learn
+catboost
+shap
+plotly
+streamlit
+python-dotenv
+pyyaml
+pytest

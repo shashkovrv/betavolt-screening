@@ -1,23 +1,6 @@
-# Работа с данными и квантовыми базами
-mp-api
-pymatgen
-matminer
-
-# Таблицы и быстрые форматы
-pandas
-numpy
-pyarrow
-
-# Машинное обучение и анализ
-scikit-learn
-catboost
-shap
-
-# Визуализация и интерфейс
-plotly
-streamlit
-
-# Инженерия и тесты
-python-dotenv
-pyyaml
-pytest
+# Зависимости для веб-сервиса и дашборда (быстрая сборка без OOM)
+streamlit>=1.28.0
+pandas>=2.0.0
+numpy>=1.24.0
+plotly>=5.15.0
+pyyaml>=6.0

@@ -18,9 +18,11 @@ st.set_page_config(
 # Кэшируем загрузку данных из SQLite, чтобы дашборд летал моментально
 @st.cache_data
 def load_data():
+    project_root = Path(__file__).resolve().parents[1]
     lib = BetavoltaicLibrary()
     df = lib.get_full_dataframe()
-    pareto_df = pd.read_csv("reports/figures/pareto_champions.csv") if Path("reports/figures/pareto_champions.csv").exists() else df.head(10)
+    pareto_csv = project_root / "reports" / "figures" / "pareto_champions.csv"
+    pareto_df = pd.read_csv(pareto_csv) if pareto_csv.exists() else df.head(10)
     return df, pareto_df
 
 df, pareto_df = load_data()
@@ -109,7 +111,12 @@ with tab3:
 with tab4:
     st.subheader("Результаты машинного обучения и физического моделирования")
     col_a, col_b = st.columns(2)
+    project_root = Path(__file__).resolve().parents[1]
+    shap_path = project_root / "reports" / "figures" / "shap_summary.png"
+    stopping_path = project_root / "reports" / "figures" / "stopping_power_curves.png"
     with col_a:
-        st.image("reports/figures/shap_summary.png", caption="SHAP-анализ важности физико-химических дескрипторов (Глава 2)")
+        if shap_path.exists():
+            st.image(str(shap_path), caption="SHAP-анализ важности физико-химических дескрипторов (Глава 2)")
     with col_b:
-        st.image("reports/figures/stopping_power_curves.png", caption="Кривые торможения бета-электронов Бете-Блоха (Глава 1/2)")
+        if stopping_path.exists():
+            st.image(str(stopping_path), caption="Кривые торможения бета-электронов Бете-Блоха (Глава 1/2)")

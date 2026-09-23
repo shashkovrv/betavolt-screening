@@ -13,6 +13,66 @@ from src.database.schema import CREATE_TABLES_SQL
 from src.physics.betavoltaics import enrich_with_betavoltaic_metrics
 
 
+# Фундаментальные энергии когезии простых веществ (эВ/атом, справочник Киттеля / CRC Handbook)
+ELEMENTAL_ECOH = {
+    'H': 2.27, 'He': 0.00, 'Li': 1.63, 'Be': 3.32, 'B': 5.81, 'C': 7.37, 'N': 4.88, 'O': 2.58, 'F': 0.82, 'Ne': 0.02,
+    'Na': 1.11, 'Mg': 1.51, 'Al': 3.39, 'Si': 4.63, 'P': 3.28, 'S': 2.90, 'Cl': 1.25, 'Ar': 0.08,
+    'K': 0.93, 'Ca': 1.84, 'Sc': 3.90, 'Ti': 4.85, 'V': 5.31, 'Cr': 4.10, 'Mn': 2.92, 'Fe': 4.28, 'Co': 4.39, 'Ni': 4.44,
+    'Cu': 3.49, 'Zn': 1.35, 'Ga': 2.81, 'Ge': 3.85, 'As': 2.96, 'Se': 2.41, 'Br': 1.16, 'Kr': 0.12,
+    'Rb': 0.85, 'Sr': 1.72, 'Y': 4.37, 'Zr': 6.25, 'Nb': 7.57, 'Mo': 6.82, 'Tc': 6.85, 'Ru': 6.74, 'Rh': 5.75, 'Pd': 3.89,
+    'Ag': 2.95, 'Cd': 1.16, 'In': 2.52, 'Sn': 3.14, 'Sb': 2.75, 'Te': 2.19, 'I': 1.11, 'Xe': 0.16,
+    'Cs': 0.80, 'Ba': 1.90, 'La': 4.47, 'Hf': 6.44, 'Ta': 8.10, 'W': 8.90, 'Re': 8.03, 'Os': 8.17, 'Ir': 6.94, 'Pt': 5.84,
+    'Au': 3.81, 'Hg': 0.67, 'Tl': 1.88, 'Pb': 2.02, 'Bi': 2.18
+}
+
+# Известные температуры плавления/сублимации ключевых полупроводниковых соединений (К)
+KNOWN_COMPOUND_TM = {
+    'C': 3800.0,
+    'BN': 3246.0,
+    'AlN': 2470.0,
+    'SiC': 3100.0,
+    'TiO2': 2116.0,
+    'B4C': 2720.0,
+    'B6P': 2270.0,
+    'GaN': 2773.0,
+    'BP': 2270.0,
+    'Ga2O3': 2170.0,
+    'Si': 1687.0
+}
+
+
+def parse_composition(formula: str) -> dict[str, float]:
+    """Парсит химическую формулу и возвращает молярные доли элементов."""
+    tokens = re.findall(r'([A-Z][a-z]?)([0-9.]*)', str(formula).strip())
+    comp = {}
+    for el, count in tokens:
+        c = float(count) if count else 1.0
+        comp[el] = comp.get(el, 0.0) + c
+    total = sum(comp.values()) if comp else 1.0
+    return {el: c / total for el, c in comp.items()}
+
+
+def calculate_cohesive_energy(formula: str, formation_energy_per_atom: float = 0.0) -> float:
+    """
+    Расчет энергии когезии кристаллической решетки Ecoh (в эВ/атом).
+    Ecoh = sum(c_i * Ecoh_elem_i) + |ΔHf|
+    """
+    comp = parse_composition(formula)
+    fe_abs = abs(formation_energy_per_atom) if pd.notna(formation_energy_per_atom) else 0.0
+    ecoh_elem = sum(comp.get(el, 3.5) * ELEMENTAL_ECOH.get(el, 3.5) for el in comp)
+    return ecoh_elem + fe_abs
+
+
+def get_effective_melting_temp(formula: str, max_elem_tm: float) -> float:
+    """Определяет эффективную температуру термодеструкции/плавления решетки."""
+    f_clean = re.sub(r'[^A-Za-z0-9]', '', str(formula).strip())
+    if f_clean in KNOWN_COMPOUND_TM:
+        return KNOWN_COMPOUND_TM[f_clean]
+    if pd.notna(max_elem_tm) and max_elem_tm > 0:
+        return float(max_elem_tm)
+    return 1500.0
+
+
 def classify_material_and_viability(formula: str) -> tuple[str, int]:
     """
     Классифицирует кристаллическое соединение по химическому классу
@@ -64,22 +124,20 @@ def classify_material_and_viability(formula: str) -> tuple[str, int]:
 
 
 def calculate_radiation_displacement_energy(
-    melting_temp_k: float,
     band_gap_ev: float,
-    formation_energy_ev: float = 0.0
+    cohesive_energy_ev: float,
+    melting_temp_k: float
 ) -> float:
     """
-    Полуэмпирическая прокси-оценка пороговой энергии смещения атомов Ed (в эВ).
-    Основана на расширенной модели Кинчина-Пиза: Ed пропорциональна
-    ширине запрещенной зоны Eg (энергии ковалентного расщепления),
-    энтальпии образования соединения |ΔHf| и максимальной температуре
-    плавления элементов в кристаллической решетке.
+    Полуэмпирическая физическая оценка пороговой энергии смещения атомов Ed (в эВ).
+    Основана на расширенной модели Кинчина-Пиза и корреляциях Келли-Гроувса:
+    Ed = 8.0 + 1.8 * Eg + 2.0 * Ecoh + 0.002 * Tm
     """
-    fe_abs = abs(formation_energy_ev) if pd.notna(formation_energy_ev) else 0.0
-    tm = melting_temp_k if (pd.notna(melting_temp_k) and melting_temp_k > 0) else 1200.0
+    eg = float(band_gap_ev) if pd.notna(band_gap_ev) else 1.0
+    ecoh = float(cohesive_energy_ev) if pd.notna(cohesive_energy_ev) else 4.0
+    tm = float(melting_temp_k) if (pd.notna(melting_temp_k) and melting_temp_k > 0) else 1500.0
     
-    # Физическая прокси-модель Ed:
-    ed = 10.0 + 2.2 * band_gap_ev + 3.0 * fe_abs + 0.0025 * tm
+    ed = 8.0 + 1.8 * eg + 2.0 * ecoh + 0.002 * tm
     return float(np.clip(ed, 10.0, 50.0))
 
 
@@ -101,23 +159,27 @@ def build_database(
     df["material_class"] = [c[0] for c in classified]
     df["is_viable"] = [c[1] for c in classified]
 
-    # 2. Расчет полуэмпирической энергии смещения Ed и индекса стойкости
-    print("  [2/5] Расчет физической энергии смещения Ed и индекса стойкости...")
+    # 2. Расчет энергии когезии, энергии смещения Ed и индекса стойкости R_score
+    print("  [2/5] Расчет физической энергии когезии Ecoh, пороговой энергии Ed и индекса R_score...")
     tm_col = "MagpieData maximum MeltingT" if "MagpieData maximum MeltingT" in df.columns else "MagpieData mean MeltingT"
     
-    if tm_col in df.columns:
-        df["ed_est_ev"] = [
-            calculate_radiation_displacement_energy(tm, eg, fe)
-            for tm, eg, fe in zip(df[tm_col], df["band_gap_calibrated"], df["formation_energy"])
-        ]
-    else:
-        df["ed_est_ev"] = [
-            calculate_radiation_displacement_energy(1500.0, eg, fe)
-            for eg, fe in zip(df["band_gap_calibrated"], df["formation_energy"])
-        ]
+    df["cohesive_energy_ev"] = [
+        calculate_cohesive_energy(f, fe)
+        for f, fe in zip(df["formula"], df["formation_energy"])
+    ]
+    
+    df["melting_temp_eff_k"] = [
+        get_effective_melting_temp(f, tm)
+        for f, tm in zip(df["formula"], df[tm_col] if tm_col in df.columns else [1500.0]*len(df))
+    ]
 
-    # Нормировка относительно эталонного алмаза (Ed_diamond ≈ 31.53 эВ)
-    ed_diamond = 10.0 + 2.2 * 5.47 + 0.0025 * 3800.0
+    df["ed_est_ev"] = [
+        calculate_radiation_displacement_energy(eg, ecoh, tm)
+        for eg, ecoh, tm in zip(df["band_gap_calibrated"], df["cohesive_energy_ev"], df["melting_temp_eff_k"])
+    ]
+
+    # Нормировка относительно эталонного алмаза (Ed_diamond = 8.0 + 1.8*5.47 + 2.0*7.37 + 0.002*3800 = 40.186 эВ)
+    ed_diamond = 8.0 + 1.8 * 5.47 + 2.0 * 7.37 + 0.002 * 3800.0
     df["radiation_resistance_score"] = (df["ed_est_ev"] / ed_diamond) * 100.0
 
     # 3. Физический расчет бетавольтаики для 4 изотопов на КАЛИБРОВАННОЙ зоне

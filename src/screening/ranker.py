@@ -51,16 +51,20 @@ class BetavoltaicLibrary:
         sql = """
         SELECT 
             m.formula, m.mp_id, m.crystal_system, m.density, m.material_class, m.is_viable,
-            e.band_gap_dft, e.band_gap_calibrated, e.theoretical_efficiency_pct,
+            e.band_gap_dft, e.delta_eg_predicted, e.band_gap_calibrated, e.theoretical_efficiency_pct,
             p.ed_est_ev, p.radiation_resistance_score,
-            p.penetration_depth_um_Ni63, p.penetration_depth_um_H3
+            p.penetration_depth_um_Ni63, p.carriers_per_electron_Ni63,
+            p.penetration_depth_um_H3, p.carriers_per_electron_H3,
+            p.penetration_depth_um_C14, p.carriers_per_electron_C14,
+            p.penetration_depth_um_Pm147, p.carriers_per_electron_Pm147
         FROM materials m
         JOIN electronic_properties e ON m.mp_id = e.mp_id
         JOIN betavoltaic_performance p ON m.mp_id = p.mp_id
-        WHERE m.formula = ?
+        WHERE UPPER(m.formula) = UPPER(?)
+        ORDER BY p.radiation_resistance_score DESC
         """
         with self._get_connection() as conn:
-            return pd.read_sql_query(sql, conn, params=(formula,))
+            return pd.read_sql_query(sql, conn, params=(str(formula).strip(),))
 
     def get_top_candidates(
         self, 

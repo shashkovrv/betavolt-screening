@@ -108,6 +108,18 @@ min_eff = st.sidebar.slider("Минимальный теоретический �
 min_rad = st.sidebar.slider("Минимальный индекс радиационной стойкости", 0.0, 100.0, 20.0, 5.0)
 gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 10.0, (1.2, 6.0), 0.1)
 
+# Фильтр по максимальной глубине пробега
+depth_col_curr = f"penetration_depth_um_{clean_tag}"
+max_depth_bound = float(df[depth_col_curr].quantile(0.98)) if depth_col_curr in df.columns else 10.0
+max_depth_slider = st.sidebar.slider(
+    f"Макс. глубина пробега {selected_isotope} (мкм)",
+    min_value=0.1,
+    max_value=round(max_depth_bound, 1),
+    value=round(max_depth_bound, 1),
+    step=0.1,
+    help="Максимально допустимая толщина полупроводника для полного поглощения энергии бета-частиц"
+)
+
 # Фильтр по формуле
 search_formula = st.sidebar.text_input("Поиск по химической формуле (например: SiC, GaN, C, TiO2, BN):", "").strip()
 
@@ -116,7 +128,8 @@ filtered_df = df[
     (df["theoretical_efficiency_pct"] >= min_eff) &
     (df["radiation_resistance_score"] >= min_rad) &
     (df["band_gap_calibrated"] >= gap_range[0]) &
-    (df["band_gap_calibrated"] <= gap_range[1])
+    (df["band_gap_calibrated"] <= gap_range[1]) &
+    (df[depth_col_curr] <= max_depth_slider)
 ].copy()
 
 if only_viable:

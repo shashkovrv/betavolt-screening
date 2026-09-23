@@ -32,6 +32,7 @@ class BetavoltaicLibrary:
         sql = """
         SELECT 
             m.mp_id, m.formula, m.crystal_system, m.density, m.volume, m.e_above_hull,
+            m.material_class, m.is_viable,
             e.band_gap_dft, e.delta_eg_predicted, e.band_gap_calibrated, e.eps_ehp_ev, e.Voc_est_v, e.theoretical_efficiency_pct,
             p.ed_est_ev, p.radiation_resistance_score,
             p.carriers_per_electron_Ni63, p.penetration_depth_um_Ni63,
@@ -49,7 +50,7 @@ class BetavoltaicLibrary:
         """Поиск конкретного полупроводника по формуле (например: 'Si', 'C', 'GaN', 'TiO2')."""
         sql = """
         SELECT 
-            m.formula, m.mp_id, m.crystal_system, m.density,
+            m.formula, m.mp_id, m.crystal_system, m.density, m.material_class, m.is_viable,
             e.band_gap_dft, e.band_gap_calibrated, e.theoretical_efficiency_pct,
             p.ed_est_ev, p.radiation_resistance_score,
             p.penetration_depth_um_Ni63, p.penetration_depth_um_H3
@@ -66,6 +67,7 @@ class BetavoltaicLibrary:
         isotope: str = "Ni-63", 
         min_efficiency: float = 18.0, 
         min_radiation_score: float = 25.0,
+        only_viable: bool = True,
         top_k: int = 10
     ) -> pd.DataFrame:
         """
@@ -73,11 +75,13 @@ class BetavoltaicLibrary:
         - Термодинамически стабильные (e_above_hull <= 0.01 эВ/атом)
         - Высокий КПД
         - Высокая радиационная стойкость
+        - Химическая жизнеспособность (only_viable)
         """
         clean_tag = isotope.replace("-", "")
+        viable_clause = "AND m.is_viable = 1" if only_viable else ""
         sql = f"""
         SELECT 
-            m.formula, m.mp_id, m.crystal_system, m.density,
+            m.formula, m.mp_id, m.crystal_system, m.material_class, m.density,
             ROUND(e.band_gap_calibrated, 2) as Eg_calib_eV, 
             ROUND(e.theoretical_efficiency_pct, 2) as Eff_pct,
             ROUND(p.ed_est_ev, 1) as Ed_eV, 
@@ -88,6 +92,7 @@ class BetavoltaicLibrary:
         JOIN electronic_properties e ON m.mp_id = e.mp_id
         JOIN betavoltaic_performance p ON m.mp_id = p.mp_id
         WHERE m.e_above_hull <= 0.01 
+          {viable_clause}
           AND e.theoretical_efficiency_pct >= {min_efficiency}
           AND p.radiation_resistance_score >= {min_radiation_score}
         ORDER BY (e.theoretical_efficiency_pct * 0.6 + p.radiation_resistance_score * 0.4) DESC

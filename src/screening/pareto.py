@@ -34,30 +34,34 @@ def run_pareto_screening(
     output_fig_path: str = "reports/figures/pareto_frontier.html",
     output_csv_path: str = "reports/figures/pareto_champions.csv"
 ):
-    print(" Запуск многокритериального Парето-скрининга...")
+    print("  Запуск многокритериального Парето-скрининга...")
 
     # 1. Читаем полную библиотеку через наш API
     lib = BetavoltaicLibrary()
     df = lib.get_full_dataframe()
     print(f"  Загружено материалов из SQLite: {len(df)}")
 
-    # 2. Первичный отбор по термодинамической стабильности (синтезируемость)
-    stable_df = df[df["e_above_hull"] <= 0.01].copy().reset_index(drop=True)
-    print(f"  Строго стабильных кандидатов (Ehull <= 0.01 эВ): {len(stable_df)}")
+    # 2. Первичный отбор по термодинамической стабильности и жизнеспособности полупроводников
+    viable_df = df[
+        (df["is_viable"] == 1) & 
+        (df["e_above_hull"] <= 0.01) & 
+        (df["band_gap_calibrated"].between(1.0, 7.5))
+    ].copy().reset_index(drop=True)
+    print(f"  Стабильных жизнеспособных полупроводников (Ehull <= 0.01 эВ, Eg 1.0-7.5 эВ): {len(viable_df)}")
 
     # 3. Вычисляем Парето-фронт по осям [КПД, Радиационная стойкость]
-    points = stable_df[["theoretical_efficiency_pct", "radiation_resistance_score"]].values
+    points = viable_df[["theoretical_efficiency_pct", "radiation_resistance_score"]].values
     pareto_mask = identify_pareto_frontier_2d(points)
     
-    stable_df["is_pareto"] = pareto_mask
-    pareto_df = stable_df[pareto_mask].sort_values(by="theoretical_efficiency_pct", ascending=False)
+    viable_df["is_pareto"] = pareto_mask
+    pareto_df = viable_df[pareto_mask].sort_values(by="theoretical_efficiency_pct", ascending=False)
     
-    print(f"   Выделено Парето-оптимальных чемпионов: {len(pareto_df)} материалов!")
+    print(f"  Выделено Парето-оптимальных чемпионов: {len(pareto_df)} материалов!")
 
     # 4. Сохраняем список чемпионов
     os.makedirs(os.path.dirname(output_csv_path), exist_ok=True)
     cols_to_save = [
-        "formula", "mp_id", "crystal_system", "density", 
+        "formula", "mp_id", "crystal_system", "material_class", "density", 
         "band_gap_calibrated", "theoretical_efficiency_pct", 
         "ed_est_ev", "radiation_resistance_score"
     ]
@@ -65,17 +69,17 @@ def run_pareto_screening(
     print(f"  Таблица чемпионов сохранена в: {output_csv_path}")
 
     # 5. Строим график Парето-фронта
-    print("  Отрисовка графика Парето-фронта для диплома...")
+    print("  Отрисовка графика Парето-фронта для ВКР...")
     
-    # Не-Парето точки (серые)
+    # Не-Парето точки
     fig = px.scatter(
-        stable_df[~stable_df["is_pareto"]],
+        viable_df[~viable_df["is_pareto"]],
         x="theoretical_efficiency_pct",
         y="radiation_resistance_score",
         color="band_gap_calibrated",
         hover_name="formula",
-        hover_data=["mp_id", "crystal_system", "density"],
-        opacity=0.4,
+        hover_data=["mp_id", "crystal_system", "material_class", "density"],
+        opacity=0.45,
         labels={
             "theoretical_efficiency_pct": "Теоретический КПД, %",
             "radiation_resistance_score": "Индекс радиационной стойкости (0-100)",
@@ -101,11 +105,11 @@ def run_pareto_screening(
     
     # Сохраняем интерактивный HTML и статическую картинку
     fig.write_html(output_fig_path)
-    print(f" График успешно сохранен в: {output_fig_path}")
+    print(f"  График успешно сохранен в: {output_fig_path}")
 
-    # Выводим топ-5 Парето чемпионов
-    print("\n ТОП-5 ПАРЕТО-ОПТИМАЛЬНЫХ МАТЕРИАЛОВ (Глава 4 диплома):")
-    print(pareto_df[cols_to_save].head(5).to_string(index=False))
+    # Выводим топ Парето чемпионов
+    print("\n ТОП ПАРЕТО-ОПТИМАЛЬНЫХ МАТЕРИАЛОВ:")
+    print(pareto_df[cols_to_save].head(10).to_string(index=False))
 
     return pareto_df
 

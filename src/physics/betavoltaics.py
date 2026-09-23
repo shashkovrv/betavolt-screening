@@ -74,7 +74,7 @@ def enrich_with_betavoltaic_metrics(df: pd.DataFrame, band_gap_col: str = "band_
     Обогащает DataFrame ключевыми бетавольтаическими характеристиками.
     Автоматически рассчитывает параметры для ВСЕХ изотопов из словаря ISOTOPES.
     """
-    print(f"⚡ Расчет специфических бетавольтаических параметров (по колонке {band_gap_col})...")
+    print(f"  Расчет специфических бетавольтаических параметров (по колонке {band_gap_col})...")
     df = df.copy()
 
     # 1. Общие электрофизические свойства полупроводника
@@ -96,7 +96,7 @@ def enrich_with_betavoltaic_metrics(df: pd.DataFrame, band_gap_col: str = "band_
         )
         print(f"   Рассчитаны параметры для изотопа: {iso_data['name']} ({iso_key})")
 
-    print(" Все изотопы успешно обсчитаны!")
+    print("  Все изотопы успешно обсчитаны!")
     return df
 
 

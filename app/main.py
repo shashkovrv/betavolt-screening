@@ -20,6 +20,8 @@ COLUMN_MAPPING = {
     "formula": "Формула",
     "mp_id": "ID Materials Project",
     "crystal_system": "Сингония",
+    "material_class": "Класс материала",
+    "is_viable": "Химическая стойкость",
     "density": "Плотность (г/см³)",
     "volume": "Объем ячейки (Å³)",
     "e_above_hull": "Энергия над оболочкой (эВ)",
@@ -60,7 +62,7 @@ st.caption("Магистерская диссертация: «Разработ�
 # Метрики в шапке
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Всего материалов в базе", f"{len(df):,}")
-col2.metric("Парето-чемпионов", f"{len(pareto_df)}")
+col2.metric("Стойких полупроводников", f"{(df['is_viable'] == 1).sum():,}")
 col3.metric("Точность ML-калибровки R²", "0.691", delta="+35.7% к DFT")
 col4.metric("Доступных изотопов", "4 (Ni-63, H-3, C-14, Pm-147)")
 
@@ -78,13 +80,35 @@ selected_isotope = st.sidebar.selectbox(
 
 clean_tag = selected_isotope.replace("-", "")
 
+# Фильтр химической жизнеспособности
+only_viable = st.sidebar.checkbox(
+    "Только химически стойкие полупроводники",
+    value=True,
+    help="Исключает растворимые соли (галогениды), гидриды, гидроксиды, токсичные цианиды и нестабильные ацетилиды"
+)
+
+# Фильтр по классам полупроводников
+material_classes = [
+    "Все классы",
+    "Ковалентные (IV, III-V, карбиды, бориды, нитриды)",
+    "Оксидные полупроводники (простые и тройные)",
+    "Халькогениды (II-VI, дихалькогениды)",
+    "Сложные оксиды",
+    "Сложные халькогениды"
+]
+selected_class = st.sidebar.selectbox(
+    "Класс полупроводников:",
+    material_classes,
+    index=0
+)
+
 # Ползунки фильтрации
 min_eff = st.sidebar.slider("Минимальный теоретический КПД (%)", 5.0, 25.0, 18.0, 0.5)
 min_rad = st.sidebar.slider("Минимальный индекс радиационной стойкости", 0.0, 100.0, 20.0, 5.0)
-gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 10.0, (1.2, 5.5), 0.1)
+gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 10.0, (1.2, 6.0), 0.1)
 
 # Фильтр по формуле
-search_formula = st.sidebar.text_input("Поиск по химической формуле (например: SiC, GaN, C, TiO2):", "").strip()
+search_formula = st.sidebar.text_input("Поиск по химической формуле (например: SiC, GaN, C, TiO2, BN):", "").strip()
 
 # Фильтрация данных
 filtered_df = df[
@@ -93,6 +117,12 @@ filtered_df = df[
     (df["band_gap_calibrated"] >= gap_range[0]) &
     (df["band_gap_calibrated"] <= gap_range[1])
 ].copy()
+
+if only_viable:
+    filtered_df = filtered_df[filtered_df["is_viable"] == 1]
+
+if selected_class != "Все классы":
+    filtered_df = filtered_df[filtered_df["material_class"] == selected_class]
 
 if search_formula:
     filtered_df = filtered_df[filtered_df["formula"].str.contains(search_formula, case=False, na=False)]
@@ -123,13 +153,14 @@ with tab1:
         * **Красные звёздочки (Парето-чемпионы)** — материалы Парето-фронта, у которых невозможно увеличить КПД без сопутствующей потери радиационной стойкости. Для скрытия или отображения чемпионов нажмите на пункт в легенде графика вверху справа.
         """)
 
-    st.markdown("### Топ-5 рекомендуемых материалов по КПД")
+    st.markdown("### Топ-5 рекомендуемых материалов по многокритериальному рангу")
     top_cols = [
-        "formula", "mp_id", "crystal_system", "density", 
+        "formula", "mp_id", "material_class", "crystal_system", "density", 
         "band_gap_calibrated", "theoretical_efficiency_pct", 
         "radiation_resistance_score", f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
     ]
-    display_top = filtered_df[top_cols].sort_values("theoretical_efficiency_pct", ascending=False).head(5).copy()
+    filtered_df["_rank_score"] = filtered_df["theoretical_efficiency_pct"] * 0.5 + filtered_df["radiation_resistance_score"] * 0.5
+    display_top = filtered_df.sort_values("_rank_score", ascending=False)[top_cols].head(5).copy()
     display_top["crystal_system"] = display_top["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(display_top["crystal_system"])
     display_top = display_top.rename(columns=COLUMN_MAPPING)
     display_top = display_top.round(2)
@@ -141,7 +172,14 @@ with tab1:
 with tab2:
     st.subheader("Интерактивная таблица библиотеки полупроводников")
     
-    table_df = filtered_df.copy()
+    table_cols = [c for c in [
+        "formula", "mp_id", "material_class", "crystal_system", "density", 
+        "band_gap_dft", "delta_eg_predicted", "band_gap_calibrated", 
+        "theoretical_efficiency_pct", "ed_est_ev", "radiation_resistance_score",
+        f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
+    ] if c in filtered_df.columns]
+    
+    table_df = filtered_df[table_cols].copy()
     table_df["crystal_system"] = table_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(table_df["crystal_system"])
     table_df = table_df.rename(columns=COLUMN_MAPPING)
     table_df = table_df.round(2)
@@ -159,7 +197,7 @@ with tab2:
     st.subheader("Паспорт выбранного полупроводника")
     available_formulas = filtered_df["formula"].dropna().unique().tolist()
     if available_formulas:
-        default_idx = available_formulas.index("C") if "C" in available_formulas else 0
+        default_idx = available_formulas.index("BN") if "BN" in available_formulas else (available_formulas.index("SiC") if "SiC" in available_formulas else 0)
         chosen_mat = st.selectbox("Выберите соединение для детального анализа:", available_formulas, index=default_idx)
         mat_row = filtered_df[filtered_df["formula"] == chosen_mat].iloc[0]
         
@@ -169,7 +207,7 @@ with tab2:
         c_m3.metric("Калиброванная зона Eg", f"{mat_row['band_gap_calibrated']:.2f} эВ", delta=f"DFT: {mat_row['band_gap_dft']:.2f} эВ")
         c_m4.metric(f"Глубина пробега ({selected_isotope})", f"{mat_row.get(f'penetration_depth_um_{clean_tag}', 0.0):.2f} мкм")
         
-        st.info(f"Материал **{chosen_mat}** ({CRYSTAL_SYSTEMS_RU.get(mat_row['crystal_system'], mat_row['crystal_system'])} сингония, плотность {mat_row['density']:.2f} г/см³). Порог образования радиационных дефектов $E_d \\approx {mat_row['ed_est_ev']:.1f}$ эВ. При поглощении одного бета-электрона изотопа {selected_isotope} генерируется в среднем **{int(mat_row.get(f'carriers_per_electron_{clean_tag}', 0))}** электронно-дырочных пар.")
+        st.info(f"Материал **{chosen_mat}** ({CRYSTAL_SYSTEMS_RU.get(mat_row['crystal_system'], mat_row['crystal_system'])} сингония, класс: {mat_row.get('material_class', 'Полупроводник')}, плотность {mat_row['density']:.2f} г/см³). Порог образования радиационных дефектов $E_d \\approx {mat_row['ed_est_ev']:.1f}$ эВ. При поглощении одного бета-электрона изотопа {selected_isotope} генерируется в среднем **{int(mat_row.get(f'carriers_per_electron_{clean_tag}', 0))}** электронно-дырочных пар.")
 
 # -------------------------------------------------------------
 # ВКЛАДКА 3: 3D ПРОСТРАНСТВО СВОЙСТВ

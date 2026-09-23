@@ -3,6 +3,10 @@ SQL-схема реляционной базы данных библиотеки
 """
 
 CREATE_TABLES_SQL = """
+DROP TABLE IF EXISTS betavoltaic_performance;
+DROP TABLE IF EXISTS electronic_properties;
+DROP TABLE IF EXISTS materials;
+
 -- 1. Таблица паспортов кристаллических материалов
 CREATE TABLE IF NOT EXISTS materials (
     mp_id TEXT PRIMARY KEY,
@@ -11,7 +15,9 @@ CREATE TABLE IF NOT EXISTS materials (
     density REAL,
     volume REAL,
     e_above_hull REAL,
-    formation_energy REAL
+    formation_energy REAL,
+    material_class TEXT,
+    is_viable INTEGER DEFAULT 1
 );
 
 -- 2. Таблица электрофизических свойств (DFT vs ML калибровка)
@@ -53,6 +59,8 @@ CREATE TABLE IF NOT EXISTS betavoltaic_performance (
 
 -- Индексы для мгновенного поиска и фильтрации
 CREATE INDEX IF NOT EXISTS idx_formula ON materials(formula);
+CREATE INDEX IF NOT EXISTS idx_viable ON materials(is_viable);
+CREATE INDEX IF NOT EXISTS idx_mat_class ON materials(material_class);
 CREATE INDEX IF NOT EXISTS idx_calibrated_gap ON electronic_properties(band_gap_calibrated);
 CREATE INDEX IF NOT EXISTS idx_eff ON electronic_properties(theoretical_efficiency_pct);
 CREATE INDEX IF NOT EXISTS idx_rad_score ON betavoltaic_performance(radiation_resistance_score);

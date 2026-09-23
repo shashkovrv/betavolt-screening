@@ -1,6 +1,7 @@
 import plotly.express as px
 import plotly.graph_objects as go
 import pandas as pd
+from src.physics.betavoltaics import calculate_penetration_depth
 
 CRYSTAL_SYSTEMS_RU = {
     "cubic": "Кубическая",
@@ -13,18 +14,25 @@ CRYSTAL_SYSTEMS_RU = {
 }
 
 
-def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: str):
-    """Строит интерактивный 2D график Парето-скрининга на русском языке."""
+def get_depth_series(dataframe: pd.DataFrame, isotope: str) -> pd.Series:
+    """Безопасно возвращает серию глубин пробега для заданного изотопа."""
     clean_tag = isotope.replace("-", "")
     depth_col = f"penetration_depth_um_{clean_tag}"
-    
-    # Подготавливаем отображаемые данные
+    if depth_col in dataframe.columns:
+        return dataframe[depth_col].round(2)
+    elif "density" in dataframe.columns:
+        return dataframe["density"].apply(lambda rho: calculate_penetration_depth(rho, isotope)).round(2)
+    return pd.Series(0.0, index=dataframe.index)
+
+
+def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: str):
+    """Строит интерактивный 2D график Парето-скрининга на русском языке."""
     plot_df = df.copy()
     plot_df["Сингония"] = plot_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(plot_df["crystal_system"])
     plot_df["КПД (%)"] = plot_df["theoretical_efficiency_pct"].round(2)
     plot_df["Стойкость"] = plot_df["radiation_resistance_score"].round(1)
     plot_df["Eg (эВ)"] = plot_df["band_gap_calibrated"].round(2)
-    plot_df["Глубина пробега (мкм)"] = plot_df[depth_col].round(2) if depth_col in plot_df.columns else 0.0
+    plot_df["Глубина пробега (мкм)"] = get_depth_series(plot_df, isotope)
 
     fig = px.scatter(
         plot_df,
@@ -65,7 +73,7 @@ def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: 
     if not pareto_df.empty:
         p_df = pareto_df.copy()
         p_df["Сингония"] = p_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(p_df["crystal_system"])
-        p_df["Глубина пробега (мкм)"] = p_df[depth_col].round(2) if depth_col in p_df.columns else 0.0
+        p_df["Глубина пробега (мкм)"] = get_depth_series(p_df, isotope)
         
         fig.add_trace(
             go.Scatter(
@@ -111,14 +119,11 @@ def plot_pareto_interactive(df: pd.DataFrame, pareto_df: pd.DataFrame, isotope: 
 
 def plot_3d_materials_space(df: pd.DataFrame, pareto_df: pd.DataFrame = None, isotope: str = "Ni-63", sample_size: int = 2500):
     """Строит трехмерное пространство критериев Парето-оптимизации (КПД, Стойкость, Пробег)."""
-    clean_tag = isotope.replace("-", "")
-    depth_col = f"penetration_depth_um_{clean_tag}"
-    
     plot_df = df.sample(min(len(df), sample_size), random_state=42).copy()
     plot_df["Сингония"] = plot_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(plot_df["crystal_system"])
     plot_df["КПД (%)"] = plot_df["theoretical_efficiency_pct"].round(2)
     plot_df["Стойкость"] = plot_df["radiation_resistance_score"].round(1)
-    plot_df["Пробег (мкм)"] = plot_df[depth_col].round(2) if depth_col in plot_df.columns else 0.0
+    plot_df["Пробег (мкм)"] = get_depth_series(plot_df, isotope)
 
     color_col = "material_class" if "material_class" in plot_df.columns else "Сингония"
 
@@ -142,7 +147,7 @@ def plot_3d_materials_space(df: pd.DataFrame, pareto_df: pd.DataFrame = None, is
     # Наложение 3D Парето-чемпионов
     if pareto_df is not None and not pareto_df.empty:
         p_df = pareto_df.copy()
-        p_depth = p_df[depth_col].round(2) if depth_col in p_df.columns else 0.0
+        p_depth = get_depth_series(p_df, isotope)
         fig.add_trace(
             go.Scatter3d(
                 x=p_df["theoretical_efficiency_pct"].round(2),

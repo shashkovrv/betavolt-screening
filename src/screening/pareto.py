@@ -69,8 +69,12 @@ def run_pareto_screening(
         "formula", "mp_id", "crystal_system", "material_class", "density", 
         "band_gap_calibrated", "theoretical_efficiency_pct", 
         "ed_est_ev", "radiation_resistance_score",
-        "penetration_depth_um_Ni63", "carriers_per_electron_Ni63"
+        "penetration_depth_um_Ni63", "carriers_per_electron_Ni63",
+        "penetration_depth_um_H3", "carriers_per_electron_H3",
+        "penetration_depth_um_C14", "carriers_per_electron_C14",
+        "penetration_depth_um_Pm147", "carriers_per_electron_Pm147"
     ]
+    cols_to_save = [c for c in cols_to_save if c in pareto_df.columns]
     pareto_df[cols_to_save].to_csv(output_csv_path, index=False)
     print(f"  Таблица 3D чемпионов сохранена в: {output_csv_path}")
 

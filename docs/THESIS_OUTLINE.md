@@ -46,7 +46,7 @@ flowchart TD
         P1["src/physics/radiation_transport.py (SciPy quad, ODE RK45)"]
         P2["src/database/repository.py (Ecoh, Ed, R_score)"]
         P3["src/database/schema.py (3NF SQLite 22 266 записей)"]
-        P4["app/main.py & app/plots.py (Streamlit Web UI)"]
+        P4["app/main.py & app/plots.py (Streamlit Web UI & Verification Cockpit)"]
     end
 
     subgraph G4["ГЛАВА 4: 3D Парето-скрининг и результаты"]
@@ -177,9 +177,15 @@ flowchart TD
   * Нормализация схемы до третьей нормальной формы (3NF).
   * Таблицы: `materials` (структура и термодинамика), `electronic_properties` (зонные параметры и КПД), `betavoltaic_performance` (изотопные свойства для 4 радионуклидов).
   * Заполнение 22 266 записей и фильтрация 10 619 жизнеспособных полупроводников.
-* **3.5. Архитектура программного интерфейса и веб-платформы Streamlit**
+* **3.5. Архитектура программного интерфейса, веб-платформы Streamlit и интерактивного верификационного центра**
   * Объектно-ориентированный интерфейс доступа к данным `BetavoltaicLibrary` (`src/screening/ranker.py`).
-  * Интерактивная визуализация 2D/3D Парето-пространства на Plotly (`app/main.py`, `app/plots.py`).
+  * Интерактивная многокритериальная визуализация 2D/3D Парето-пространства на Plotly (`app/main.py`, `app/plots.py`).
+  * **Автоматизированный верификационный центр (Вкладка 4 «Физико-математическая верификация и ML-модели»)** как практический инструмент защиты ВКР:
+    * Экспресс-аудит качества калибровки $\Delta$-Learning (график согласия Parity Plot $y=x$, динамические кривые обучения Train/Val MAE по 800 итерациям, гистограмма остатков квантового занижения со смещением моды к $0.00$ эВ);
+    * Прямая сверка по эталонным полупроводникам NIST, Landolt-Börnstein, CRC Handbook (таблица 14 золотых стандартов со снижением ошибки в 4.1 раза);
+    * Интерпретация признаков SHAP XAI (Beeswarm Plot, рейтинг значимости 135 дескрипторов Magpie);
+    * Интерактивная верификация радиационного переноса, профилей потерь энергии Джоя-Ло $dE/dx$, дифференциальных сечений дефектообразования Мотта / Мак-Кинли–Фешбаха $\sigma_d(E)$ и кинематики упругой отдачи ядер $T_{max}$;
+    * Инструментарий демонстрации членам Государственной экзаменационной комиссии (ГЭК) надежности моделей, воспроизводимости расчетов и строгого соблюдения физических законов сохранения.
 * **3.6. Выводы по главе 3**
 
 ---
@@ -258,7 +264,7 @@ flowchart TD
 | **§3.2. Энергия смещения $E_d$** | [`src/database/repository.py#L19-L221`](file:///D:/betavolt-screening/betavolt-screening/src/database/repository.py#L19-L221) | $E_{coh} = \sum c_i E_{coh,i}^{elem} + \|\Delta H_f\|$; $E_d = 8.0 + 1.8 E_g + 2.0 E_{coh} + 0.002 T_m$; $R_{score} = (E_d / E_d^{diamond}) \cdot 100\%$ | $E_d(\text{Si}) = 13.0$ эВ ($R_{score} = 32.4\%$), $E_d(\text{C}) = 40.2$ эВ ($R_{score} = 100.0\%$), $E_d(\text{SiC}) = 22.0$ эВ ($R_{score} = 54.7\%$) |
 | **§3.3. Модель КПД и $V_{oc}$** | [`src/physics/betavoltaics.py#L106-L138`](file:///D:/betavolt-screening/betavolt-screening/src/physics/betavoltaics.py#L106-L138) | $V_{oc} = 0.72 E_g \frac{1 - e^{-E_g/0.75}}{1 + (E_g/5.2)^{4.5}}$; $\eta_{theor} = (V_{oc}/\varepsilon_{ehp}) \cdot 0.85 \cdot 100\%$ | $\eta_{theor}(\text{Si}) = 7.15\%$, $\eta_{theor}(4\text{H-SiC}) = 18.89\%$, $\eta_{theor}(\text{GaN}) = 17.88\%$, $\eta_{theor}(\text{C}) = 9.38\%$ |
 | **§3.4. БД SQLite 3NF** | [`src/database/schema.py`](file:///D:/betavolt-screening/betavolt-screening/src/database/schema.py), [`src/database/repository.py#L224-L312`](file:///D:/betavolt-screening/betavolt-screening/src/database/repository.py#L224-L312) | 3NF таблицы: `materials`, `electronic_properties`, `betavoltaic_performance` | 22 266 записей в SQLite, 10 619 жизнеспособных полупроводников |
-| **§3.5. Веб-платформа Streamlit** | [`app/main.py`](file:///D:/betavolt-screening/betavolt-screening/app/main.py), [`app/plots.py`](file:///D:/betavolt-screening/betavolt-screening/app/plots.py) | Интерактивный дашборд (4 вкладки, 2D/3D визуализация Plotly) | Интерактивный скрининг в реальном времени с фильтрацией по 4 изотопам |
+| **§3.5. Веб-платформа и Верификационный центр** | [`app/main.py`](file:///D:/betavolt-screening/betavolt-screening/app/main.py), [`app/plots.py`](file:///D:/betavolt-screening/betavolt-screening/app/plots.py), [`scripts/verify_ml_model.py`](file:///D:/betavolt-screening/betavolt-screening/scripts/verify_ml_model.py) | Интерактивный дашборд и Верификационный центр защиты ВКР (4 вкладки: Парето-скрининг, База материалов, 3D пространство, Физико-математическая верификация) | Интерактивный скрининг в реальном времени, 3D Парето, прямая валидация по эталонам NIST и контроль сходимости ML |
 | **§4.1–4.2. 3D Парето-скрининг** | [`src/screening/pareto.py#L18-L128`](file:///D:/betavolt-screening/betavolt-screening/src/screening/pareto.py#L18-L128), [`reports/figures/pareto_champions.csv`](file:///D:/betavolt-screening/betavolt-screening/reports/figures/pareto_champions.csv) | Алгоритм 3D Парето `identify_pareto_frontier_3d` на $[\max \eta, \max R_{score}, \min R]$ | **84** 3D Парето-чемпиона, включая $\text{BaTa}_6\text{O}_{16}$, $\text{YWN}_3$, $\text{Dy}_3\text{GaS}_6$, $\text{LaTa}_3\text{O}_9$, $\text{Lu}_6\text{WO}_{12}$, $\text{C}$ |
 | **§4.3–4.4. Верификация эталонов** | [`src/screening/ranker.py#L49-L131`](file:///D:/betavolt-screening/betavolt-screening/src/screening/ranker.py#L49-L131), [`src/physics/betavoltaics.py#L176-L195`](file:///D:/betavolt-screening/betavolt-screening/src/physics/betavoltaics.py#L176-L195) | Поиск в БД через `BetavoltaicLibrary` и сравнение с экспериментальными литературными эталонами | Полная сходимость параметров для $\text{Si}$, $\text{Diamond}$, $\text{SiC}$, $\text{GaN}$, $\text{TiO}_2$ |
 

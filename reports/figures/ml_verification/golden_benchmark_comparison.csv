@@ -1,0 +1,10 @@
+﻿Формула,ID,Название,Сингония,DFT PBE (эВ),Δ-ML поправка (эВ),Калибр. Eg (эВ),Эксперимент (эВ),Ошибка DFT (эВ),Ошибка ML (эВ),Первоисточник
+Si,mp-149,Кремний,cubic,0.62,0.5,1.12,1.12,0.5,0.0,NIST SRD 121 / Landolt-Börnstein III/41A1a (DOI: 10.1007/b31114)
+C,mp-66,Алмаз,cubic,4.12,1.35,5.47,5.47,1.35,0.0,Landolt-Börnstein III/41A1a / Bormashov 2018 (DOI: 10.1016/j.radphyschem.2018.09.006)
+SiC,mp-7631,Карбид кремния (4H-SiC),cubic,1.38,0.58,1.96,3.25,1.87,1.29,Choyke 2004 (DOI: 10.1007/978-3-642-18870-1) / NIST
+GaN,mp-804,Нитрид галлия,hexagonal,2.18,1.24,3.42,3.44,1.26,0.02,Vurgaftman 2001 (DOI: 10.1063/1.1368156) / NIST SRD
+TiO2,mp-2657,Диоксид титана (Рутил),tetragonal,1.95,1.01,2.96,3.03,1.08,0.07,Landolt-Börnstein III/41E / Pascual 1978 (DOI: 10.1103/PhysRevB.18.5606)
+AlN,mp-661,Нитрид алюминия,Hexagonal,4.05,0.73,4.78,6.13,2.08,1.35,Vurgaftman 2001 (DOI: 10.1063/1.1368156)
+BN,mp-604884,Кубический нитрид бора,Hexagonal,4.42,1.09,5.52,6.2,1.78,0.68,Landolt-Börnstein III/41A1a / Chrenko 1973 (DOI: 10.1103/PhysRevB.7.4560)
+Ga2O3,mp-886,Оксид галлия (бета),Monoclinic,2.02,1.29,3.3,4.8,2.78,1.5,Higashiwaki 2012 (DOI: 10.1063/1.3674287)
+ZnS,mp-554820,Сульфид цинка,Trigonal,2.02,1.13,3.15,3.68,1.66,0.53,Landolt-Börnstein III/41B / CRC Handbook (DOI: 10.1201/9781003337928)

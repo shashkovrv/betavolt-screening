@@ -18,3 +18,8 @@ models/*.joblib
 .ipynb_checkpoints/
 catboost_info/
 
+# Agent metadata and research configs
+.agents/
+AGENTS.md
+
+

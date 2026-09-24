@@ -103,7 +103,8 @@ material_classes = [
     "Оксидные полупроводники (простые и тройные)",
     "Халькогениды (II-VI, дихалькогениды)",
     "Сложные оксиды",
-    "Сложные халькогениды"
+    "Сложные халькогениды",
+    "Прочие полупроводники"
 ]
 selected_class = st.sidebar.selectbox(
     "Класс полупроводников:",
@@ -116,15 +117,32 @@ min_eff = st.sidebar.slider("Минимальный теоретический �
 min_rad = st.sidebar.slider("Минимальный индекс радиационной стойкости", 0.0, 100.0, 20.0, 5.0)
 gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 8.0, (1.1, 5.5), 0.1)
 
-# Фильтр по максимальной глубине пробега
+# Фильтр по максимальной глубине пробега с динамической калибровкой под изотоп
 depth_col_curr = f"penetration_depth_um_{clean_tag}"
-max_depth_bound = float(df[depth_col_curr].quantile(0.98)) if depth_col_curr in df.columns else 10.0
+if depth_col_curr in df.columns:
+    min_depth_data = float(df[depth_col_curr].min())
+    max_depth_bound = float(df[depth_col_curr].quantile(0.99))
+    if selected_isotope == "H-3":
+        min_val_slider = 0.05
+        step_slider = 0.01
+        max_val_slider = max(0.2, round(max_depth_bound, 2))
+    elif selected_isotope == "Ni-63":
+        min_val_slider = 0.5
+        step_slider = 0.1
+        max_val_slider = round(max_depth_bound, 1)
+    else:  # C-14, Pm-147
+        min_val_slider = 1.0
+        step_slider = 0.5
+        max_val_slider = round(max_depth_bound, 1)
+else:
+    min_val_slider, max_val_slider, step_slider = 0.1, 10.0, 0.1
+
 max_depth_slider = st.sidebar.slider(
     f"Макс. глубина пробега {selected_isotope} (мкм)",
-    min_value=0.1,
-    max_value=round(max_depth_bound, 1),
-    value=round(max_depth_bound, 1),
-    step=0.1,
+    min_value=min_val_slider,
+    max_value=max_val_slider,
+    value=max_val_slider,
+    step=step_slider,
     help="Максимально допустимая толщина полупроводника для полного поглощения энергии бета-частиц"
 )
 
@@ -174,9 +192,13 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader(f"Карта многокритериального отбора (Изотоп: {selected_isotope})")
     
+    if filtered_df.empty:
+        st.warning("⚠️ По заданным критериям фильтрации материалы не найдены. Ослабьте фильтры на боковой панели.")
+    
     st.plotly_chart(plot_pareto_interactive(filtered_df, active_pareto_df, selected_isotope), use_container_width=True)
     
-    st.caption(f"Выделено 3D Парето-чемпионов в активной выборке: **{len(active_pareto_df)}** материалов (помечены красными звёздами).")
+    if not active_pareto_df.empty:
+        st.caption(f"Выделено 3D Парето-чемпионов в активной выборке: **{len(active_pareto_df)}** материалов (помечены красными звёздами).")
 
     with st.expander("Физический смысл и математическая инвариантность 3D Парето-отбора", expanded=False):
         st.markdown(r"""
@@ -189,17 +211,20 @@ with tab1:
         """)
 
     st.markdown("### Топ-5 рекомендуемых материалов по многокритериальному рангу")
-    top_cols = [
-        "formula", "mp_id", "material_class", "crystal_system", "density", 
-        "band_gap_calibrated", "theoretical_efficiency_pct", 
-        "radiation_resistance_score", f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
-    ]
-    filtered_df["_rank_score"] = filtered_df["theoretical_efficiency_pct"] * 0.5 + filtered_df["radiation_resistance_score"] * 0.5
-    display_top = filtered_df.sort_values("_rank_score", ascending=False)[top_cols].head(5).copy()
-    display_top["crystal_system"] = display_top["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(display_top["crystal_system"])
-    display_top = display_top.rename(columns=COLUMN_MAPPING)
-    display_top = display_top.round(2)
-    st.dataframe(display_top, use_container_width=True, hide_index=True)
+    if not filtered_df.empty:
+        top_cols = [
+            "formula", "mp_id", "material_class", "crystal_system", "density", 
+            "band_gap_calibrated", "theoretical_efficiency_pct", 
+            "radiation_resistance_score", f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
+        ]
+        filtered_df["_rank_score"] = filtered_df["theoretical_efficiency_pct"] * 0.5 + filtered_df["radiation_resistance_score"] * 0.5
+        display_top = filtered_df.sort_values("_rank_score", ascending=False)[top_cols].head(5).copy()
+        display_top["crystal_system"] = display_top["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(display_top["crystal_system"])
+        display_top = display_top.rename(columns=COLUMN_MAPPING)
+        display_top = display_top.round(2)
+        st.dataframe(display_top, use_container_width=True, hide_index=True)
+    else:
+        st.info("Нет данных для формирования списка Топ-5.")
 
 # -------------------------------------------------------------
 # ВКЛАДКА 2: БАЗА МАТЕРИАЛОВ
@@ -207,30 +232,33 @@ with tab1:
 with tab2:
     st.subheader("Интерактивная таблица библиотеки полупроводников")
     
-    table_cols = [c for c in [
-        "formula", "mp_id", "material_class", "crystal_system", "density", 
-        "band_gap_dft", "delta_eg_predicted", "band_gap_calibrated", 
-        "theoretical_efficiency_pct", "ed_est_ev", "radiation_resistance_score",
-        f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
-    ] if c in filtered_df.columns]
-    
-    table_df = filtered_df[table_cols].copy()
-    table_df["crystal_system"] = table_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(table_df["crystal_system"])
-    table_df = table_df.rename(columns=COLUMN_MAPPING)
-    table_df = table_df.round(2)
-    st.dataframe(table_df, use_container_width=True, height=380, hide_index=True)
-    
-    csv_data = table_df.to_csv(index=False).encode('utf-8')
-    st.download_button(
-        label="Скачать выборку (CSV)",
-        data=csv_data,
-        file_name=f"betavoltaic_screening_{selected_isotope}.csv",
-        mime="text/csv"
-    )
+    if filtered_df.empty:
+        st.warning("⚠️ Выборка пуста. Пожалуйста, измените параметры фильтрации в боковой панели.")
+    else:
+        table_cols = [c for c in [
+            "formula", "mp_id", "material_class", "crystal_system", "density", 
+            "band_gap_dft", "delta_eg_predicted", "band_gap_calibrated", 
+            "theoretical_efficiency_pct", "ed_est_ev", "radiation_resistance_score",
+            f"penetration_depth_um_{clean_tag}", f"carriers_per_electron_{clean_tag}"
+        ] if c in filtered_df.columns]
+        
+        table_df = filtered_df[table_cols].copy()
+        table_df["crystal_system"] = table_df["crystal_system"].map(CRYSTAL_SYSTEMS_RU).fillna(table_df["crystal_system"])
+        table_df = table_df.rename(columns=COLUMN_MAPPING)
+        table_df = table_df.round(2)
+        st.dataframe(table_df, use_container_width=True, height=380, hide_index=True)
+        
+        csv_data = table_df.to_csv(index=False).encode('utf-8')
+        st.download_button(
+            label="Скачать выборку (CSV)",
+            data=csv_data,
+            file_name=f"betavoltaic_screening_{selected_isotope}.csv",
+            mime="text/csv"
+        )
 
     st.divider()
     st.subheader("Паспорт выбранного полупроводника")
-    available_formulas = filtered_df["formula"].dropna().unique().tolist()
+    available_formulas = filtered_df["formula"].dropna().unique().tolist() if not filtered_df.empty else []
     if available_formulas:
         default_idx = available_formulas.index("BN") if "BN" in available_formulas else (available_formulas.index("SiC") if "SiC" in available_formulas else 0)
         chosen_mat = st.selectbox("Выберите соединение для детального анализа:", available_formulas, index=default_idx)
@@ -248,12 +276,16 @@ with tab2:
         immune_str = "Полная радиационная неуязвимость ($T_{max} < E_d$, упругое смещение узлов невозможно)" if is_immune_val else f"Возможно образование дефектов смещения ($T_{{max}} = {t_max_val:.1f} > E_d = {ed_val:.1f}$ эВ)"
 
         st.info(f"Материал **{chosen_mat}** ({CRYSTAL_SYSTEMS_RU.get(mat_row['crystal_system'], mat_row['crystal_system'])} сингония, класс: {mat_row.get('material_class', 'Полупроводник')}, плотность {mat_row['density']:.2f} г/см³). Порог образования радиационных дефектов $E_d \\approx {ed_val:.1f}$ эВ (модель Келли–Гроувса). Макс. энергия отдачи ядра для {selected_isotope}: $T_{{max}} \\approx {t_max_val:.1f}$ эВ. **Статус стойкости:** {immune_str}. При поглощении одного бета-электрона изотопа {selected_isotope} генерируется в среднем **{int(mat_row.get(f'carriers_per_electron_{clean_tag}', 0))}** электронно-дырочных пар.")
+    else:
+        st.info("Выберите другие параметры фильтрации для просмотра паспорта материала.")
 
 # -------------------------------------------------------------
 # ВКЛАДКА 3: 3D ПРОСТРАНСТВО СВОЙСТВ
 # -------------------------------------------------------------
 with tab3:
     st.subheader(f"3D Пространство критериев Парето-оптимизации ({selected_isotope})")
+    if filtered_df.empty:
+        st.warning("⚠️ Нет данных для построения 3D пространства свойств.")
     st.plotly_chart(plot_3d_materials_space(filtered_df, active_pareto_df, selected_isotope), use_container_width=True)
     st.caption("3D-пространство визуализирует фундаментальный компромисс Парето-отбора: максимизацию КПД (ось X), максимизацию радиационной стойкости (ось Y) и минимизацию необходимой толщины кристалла (ось Z).")
 
@@ -266,12 +298,16 @@ with tab4:
     col_a, col_b = st.columns(2)
     project_root = Path(__file__).resolve().parents[1]
     shap_path = project_root / "reports" / "figures" / "shap_summary.png"
+    shap_bar_path = project_root / "reports" / "figures" / "shap_importance_bar.png"
     stopping_path = project_root / "reports" / "figures" / "stopping_power_curves.png"
     
     with col_a:
         st.markdown("#### Анализ значимости дескрипторов (SHAP / XAI)")
         if shap_path.exists():
-            st.image(str(shap_path), use_container_width=True)
+            st.image(str(shap_path), use_container_width=True, caption="Распределение SHAP-значений по дескрипторам Magpie")
+        if shap_bar_path.exists():
+            with st.expander("Показать столбчатую диаграмму средней важности (|SHAP|)", expanded=False):
+                st.image(str(shap_bar_path), use_container_width=True, caption="Рейтинг топ-15 наиболее влиятельных признаков")
         st.markdown("""
         **Интерпретация результатов:**
         * График показывает вклад физико-химических дескрипторов кристалла в прогнозирование величины поправки $\\Delta E_g = E_g^{exp} - E_g^{DFT}$.
@@ -282,7 +318,7 @@ with tab4:
     with col_b:
         st.markdown("#### Ионизационные потери энергии (Модель Бете-Блоха / Джоя-Ло)")
         if stopping_path.exists():
-            st.image(str(stopping_path), use_container_width=True)
+            st.image(str(stopping_path), use_container_width=True, caption="Кривые тормозной способности -dE/dx для эталонных полупроводников")
         st.markdown("""
         **Интерпретация результатов:**
         * График отражает удельную тормозную способность материалов $-\\frac{dE}{dx}$ (кэВ/мкм) по модификации Джоя-Ло.

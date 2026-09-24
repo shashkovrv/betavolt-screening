@@ -4,6 +4,7 @@ pymatgen
 matminer
 pandas
 numpy
+scipy
 pyarrow
 scikit-learn
 catboost

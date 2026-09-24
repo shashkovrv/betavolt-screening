@@ -17,6 +17,7 @@ dependencies = [
     "matminer",
     "pandas",
     "numpy",
+    "scipy",
     "catboost",
     "scikit-learn",
     "shap",

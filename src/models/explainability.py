@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 # Защита путей для кнопки Play
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
@@ -74,7 +77,7 @@ def run_explainability_analysis(
     output_summary_path: str = "reports/figures/shap_summary.png",
     output_bar_path: str = "reports/figures/shap_importance_bar.png"
 ):
-    print("Запуск анализа объяснимости модели (XAI / SHAP Analysis)...")
+    print("[*] Запуск анализа объяснимости модели (XAI / SHAP для Delta-Learning)...")
 
     if not os.path.exists(model_path):
         raise FileNotFoundError(f"Файл модели {model_path} не найден! Сначала запусти delta_learner.py.")
@@ -111,11 +114,11 @@ def run_explainability_analysis(
 
     os.makedirs(os.path.dirname(output_summary_path), exist_ok=True)
 
-    # 4. График 1: SHAP Beeswarm Plot (Влияние величины признака на прогноз)
+    # 4. График 1: SHAP Beeswarm Plot (Влияние величины признака на прогноз поправки Delta_Eg)
     plt.figure(figsize=(11, 7))
     shap.summary_plot(shap_values, X_ru, show=False, max_display=12)
-    plt.title("Влияние дескрипторов на калибровку запрещенной зоны (SHAP)", fontsize=13, pad=15)
-    plt.xlabel("Влияние на значение поправки $\\Delta E_g$, эВ", fontsize=11)
+    plt.title("Влияние физико-химических дескрипторов на квантовую поправку $\\Delta E_g$ (SHAP)", fontsize=13, pad=15)
+    plt.xlabel("Влияние на значение поправки $\\Delta E_g = E_g^{exp} - E_g^{DFT}$ (эВ)", fontsize=11)
     
     # Русификация шкалы цветовой легенды (Colorbar)
     fig = plt.gcf()
@@ -131,13 +134,13 @@ def run_explainability_analysis(
     # 5. График 2: Bar Plot абсолютной важности
     plt.figure(figsize=(10, 6))
     shap.summary_plot(shap_values, X_ru, plot_type="bar", show=False, max_display=12)
-    plt.title("Топ-12 наиболее значимых дескрипторов", fontsize=13, pad=15)
-    plt.xlabel("Среднее абсолютное влияние на модель (эВ)", fontsize=11)
+    plt.title("Топ-12 ключевых дескрипторов квантовой недооценки $\\Delta E_g$", fontsize=13, pad=15)
+    plt.xlabel("Среднее абсолютное влияние на модель $|\\mathrm{SHAP}|$ (эВ)", fontsize=11)
     plt.tight_layout()
     plt.savefig(output_bar_path, dpi=300, bbox_inches="tight")
     plt.close()
 
-    print("Анализ объяснимости успешно завершен!")
+    print("[+] Анализ объяснимости успешно завершен! Графики сохранены в reports/figures/")
 
 
 if __name__ == "__main__":

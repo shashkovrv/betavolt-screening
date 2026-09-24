@@ -16,4 +16,5 @@ data/03_features/
 models/*.cbm
 models/*.joblib
 .ipynb_checkpoints/
+catboost_info/
 

@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 # Гарантируем, что Python видит корень проекта при любом способе запуска
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
@@ -75,8 +78,8 @@ BENCHMARK_SEMICONDUCTORS = [
         "e_above_hull": 0.002,
         "formation_energy": -0.34,
         "band_gap_dft": 2.23,
-        "delta_eg_predicted": 1.03,
-        "band_gap_calibrated": 3.26,
+        "delta_eg_predicted": 0.49,
+        "band_gap_calibrated": 2.72,
     },
     {
         "mp_id": "mp-7631",
@@ -87,8 +90,8 @@ BENCHMARK_SEMICONDUCTORS = [
         "e_above_hull": 0.00,
         "formation_energy": -0.34,
         "band_gap_dft": 1.38,
-        "delta_eg_predicted": 1.08,
-        "band_gap_calibrated": 2.46,
+        "delta_eg_predicted": 0.58,
+        "band_gap_calibrated": 1.96,
     },
     {
         "mp_id": "mp-804",
@@ -111,8 +114,8 @@ BENCHMARK_SEMICONDUCTORS = [
         "e_above_hull": 0.00,
         "formation_energy": -3.20,
         "band_gap_dft": 1.95,
-        "delta_eg_predicted": 1.20,
-        "band_gap_calibrated": 3.15,
+        "delta_eg_predicted": 1.01,
+        "band_gap_calibrated": 2.96,
     }
 ]
 
@@ -149,17 +152,11 @@ def get_effective_melting_temp(formula: str, max_elem_tm: float) -> float:
     return 1500.0
 
 
-def classify_material_and_viability(formula: str) -> tuple[str, int]:
+def classify_material_and_viability(formula: str, band_gap: float = 2.0) -> tuple[str, int]:
     """
     Классифицирует кристаллическое соединение по химическому классу
     и определяет его технологическую жизнеспособность для бетавольтаики.
-    
-    Исключает:
-    - Растворимые соли и галогениды (F, Cl, Br, I);
-    - Гидриды и гидроксиды (H);
-    - Токсичные цианиды (CN) и оксоанионы (CO3, NO3, SO4, PO4);
-    - Нестабильные ионные ацетилиды щелочных/щелочноземельных металлов (CaC2, SrC2, LiC);
-    - Радиоактивные актиниды и благородные газы.
+    Исключает диэлектрические изоляторы, соли и нестойкие фазы.
     """
     f = str(formula).strip()
 
@@ -177,19 +174,26 @@ def classify_material_and_viability(formula: str) -> tuple[str, int]:
 
     elems = set(re.findall(r"[A-Z][a-z]?", f))
 
-    # 2. Ковалентные полупроводники (IV, III-V, карбиды, бориды, нитриды, фосфиды)
+    # 2. Отсечение диэлектрических изоляторов (бораты, силикаты, фосфаты щелочных/щелочноземельных металлов)
+    alkali_metals = {"Li", "Na", "K", "Rb", "Cs"}
+    alkaline_earth = {"Be", "Mg", "Ca", "Sr", "Ba"}
+    if "O" in elems and ("B" in elems or "Si" in elems or "P" in elems):
+        if len(elems.intersection(alkali_metals | alkaline_earth)) > 0 and band_gap > 4.5:
+            return "Исключен (Диэлектрическая керамика/Борат/Фосфат)", 0
+
+    # 3. Ковалентные полупроводники (IV, III-V, карбиды, бориды, нитриды, фосфиды)
     if ("N" in elems or "C" in elems or "B" in elems or "P" in elems or "Si" in elems or "As" in elems) and \
        ("O" not in elems) and ("S" not in elems) and ("Se" not in elems) and ("Te" not in elems):
         return "Ковалентные (IV, III-V, карбиды, бориды, нитриды)", 1
 
-    # 3. Оксидные полупроводники
+    # 4. Оксидные полупроводники
     if "O" in elems:
         if len(elems) <= 3:
             return "Оксидные полупроводники (простые и тройные)", 1
         else:
             return "Сложные оксиды", 1
 
-    # 4. Халькогениды (II-VI, слоистые TMDC)
+    # 5. Халькогениды (II-VI, слоистые TMDC)
     if any(ch in elems for ch in ["S", "Se", "Te"]):
         if len(elems) <= 3:
             return "Халькогениды (II-VI, дихалькогениды)", 1
@@ -206,7 +210,6 @@ def calculate_radiation_displacement_energy(
 ) -> float:
     """
     Полуэмпирическая физическая оценка пороговой энергии смещения атомов Ed (в эВ).
-    Основана на расширенной модели Кинчина-Пиза и корреляциях Келли-Гроувса:
     Ed = 8.0 + 1.8 * Eg + 2.0 * Ecoh + 0.002 * Tm
     """
     eg = float(band_gap_ev) if pd.notna(band_gap_ev) else 1.0
@@ -221,7 +224,7 @@ def build_database(
     calibrated_path: str = "data/03_features/materials_calibrated.parquet",
     db_path: str = "data/05_database/betavoltaic_library.db"
 ):
-    print(" Формирование итоговой реляционной базы данных...")
+    print("[*] Формирование итоговой реляционной базы данных...")
     
     if not os.path.exists(calibrated_path):
         raise FileNotFoundError(f"Файл {calibrated_path} не найден! Запусти delta_learner.py.")
@@ -237,7 +240,10 @@ def build_database(
 
     # 1. Химическая классификация и жизнеспособность
     print("  [1/5] Химическая классификация и оценка жизнеспособности...")
-    classified = [classify_material_and_viability(f) for f in df["formula"]]
+    classified = [
+        classify_material_and_viability(f, eg) 
+        for f, eg in zip(df["formula"], df["band_gap_calibrated"])
+    ]
     df["material_class"] = [c[0] for c in classified]
     df["is_viable"] = [c[1] for c in classified]
 
@@ -260,7 +266,7 @@ def build_database(
         for eg, ecoh, tm in zip(df["band_gap_calibrated"], df["cohesive_energy_ev"], df["melting_temp_eff_k"])
     ]
 
-    # Нормировка относительно эталонного алмаза (Ed_diamond = 8.0 + 1.8*5.47 + 2.0*7.37 + 0.002*3800 = 40.186 эВ)
+    # Нормировка относительно эталонного алмаза
     ed_diamond = 8.0 + 1.8 * 5.47 + 2.0 * 7.37 + 0.002 * 3800.0
     df["radiation_resistance_score"] = (df["ed_est_ev"] / ed_diamond) * 100.0
 
@@ -290,19 +296,19 @@ def build_database(
 
     perf_cols = [
         "mp_id", "ed_est_ev", "radiation_resistance_score",
-        "carriers_per_electron_Ni63", "penetration_depth_um_Ni63",
-        "carriers_per_electron_H3", "penetration_depth_um_H3",
-        "carriers_per_electron_C14", "penetration_depth_um_C14",
-        "carriers_per_electron_Pm147", "penetration_depth_um_Pm147"
+        "carriers_per_electron_Ni63", "penetration_depth_um_Ni63", "t_max_ev_Ni63", "is_immune_Ni63",
+        "carriers_per_electron_H3", "penetration_depth_um_H3", "t_max_ev_H3", "is_immune_H3",
+        "carriers_per_electron_C14", "penetration_depth_um_C14", "t_max_ev_C14", "is_immune_C14",
+        "carriers_per_electron_Pm147", "penetration_depth_um_Pm147", "t_max_ev_Pm147", "is_immune_Pm147"
     ]
     df[perf_cols].to_sql("betavoltaic_performance", conn, if_exists="replace", index=False)
 
     conn.commit()
     conn.close()
 
-    print(f"\n Реляционная база данных успешно сохранена в: {db_path}")
-    print(f" Записано записей: {len(df)} в 3 связанные таблицы!")
-    print(f" Жизнеспособных полупроводников: {df['is_viable'].sum()} из {len(df)}")
+    print(f"\n[+] Реляционная база данных успешно сохранена в: {db_path}")
+    print(f"    Записано записей: {len(df)} в 3 связанные таблицы!")
+    print(f"    Жизнеспособных полупроводников: {df['is_viable'].sum()} из {len(df)}")
 
 
 if __name__ == "__main__":

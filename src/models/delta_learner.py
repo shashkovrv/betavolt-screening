@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import numpy as np
 import pandas as pd
@@ -6,13 +7,17 @@ from catboost import CatBoostRegressor
 from sklearn.model_selection import KFold
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 def train_and_apply_delta_model(
     features_path: str = "data/03_features/materials_features.parquet",
     experimental_path: str = "data/04_external/experimental_bandgaps.parquet",
     model_output_path: str = "models/delta_eg_catboost.cbm",
-    output_calibrated_path: str = "data/03_features/materials_calibrated.parquet"
+    output_calibrated_path: str = "data/03_features/materials_calibrated.parquet",
+    metrics_output_path: str = "models/metrics_report.json"
 ):
-    print(" Запуск модуля машинного обучения (Physics-Informed ML)...")
+    print("[*] Запуск модуля машинного обучения (Канонический Delta-Learning, Ramakrishnan et al. 2015)...")
 
     # 1. Загрузка данных
     df_features = pd.read_parquet(features_path)
@@ -26,7 +31,6 @@ def train_and_apply_delta_model(
     print(f"  Признаков: {len(all_feature_cols)} (включая DFT параметры и 132 дескриптора Magpie)")
 
     # 3. Сопоставляем эксперименты с признаками БЕЗ дублирования колонок
-    # Из df_exp берем ТОЛЬКО clean_formula и band_gap_exp
     train_df = pd.merge(
         df_features,
         df_exp[["clean_formula", "band_gap_exp"]],
@@ -38,25 +42,31 @@ def train_and_apply_delta_model(
     print(f"  Обучающая выборка: {len(train_df)} материалов")
 
     X = train_df[all_feature_cols]
-    y = train_df["band_gap_exp"]  # Целевая переменная: лабораторное значение Eg
+    
+    # 🎯 КАНОНИЧЕСКИЙ ТАРГЕТ ДЕЛЬТА-ОБУЧЕНИЯ (Ramakrishnan et al., JCTC 2015):
+    # Обучаем модель на квантовую систематическую ошибку: Delta_Eg = Eg_exp - Eg_dft
+    y_delta = train_df["band_gap_exp"] - train_df["band_gap_dft"]
+    y_exp = train_df["band_gap_exp"]
+    y_dft = train_df["band_gap_dft"]
 
     # 4. Честная 5-кратная кросс-валидация
-    print("  [1/3] Проведение 5-Fold кросс-валидации...")
+    print("  [1/3] Проведение 5-Fold кросс-валидации для Delta-модели...")
     kf = KFold(n_splits=5, shuffle=True, random_state=42)
 
-    cb_maes, cb_r2s = [], []
+    delta_maes, delta_r2s = [], []
     dft_maes, dft_r2s = [], []
 
-    for train_idx, val_idx in kf.split(X, y):
-        X_tr, y_tr = X.iloc[train_idx], y.iloc[train_idx]
-        X_val, y_val = X.iloc[val_idx], y.iloc[val_idx]
+    for train_idx, val_idx in kf.split(X, y_delta):
+        X_tr, y_tr_delta = X.iloc[train_idx], y_delta.iloc[train_idx]
+        X_val, y_val_delta = X.iloc[val_idx], y_delta.iloc[val_idx]
+        y_val_actual = y_exp.iloc[val_idx]
+        dft_val = y_dft.iloc[val_idx]
 
         # Бейзлайн: чистый квантовый расчет DFT без всякого ML
-        dft_pred = X_val["band_gap_dft"]
-        dft_maes.append(mean_absolute_error(y_val, dft_pred))
-        dft_r2s.append(r2_score(y_val, dft_pred))
+        dft_maes.append(mean_absolute_error(y_val_actual, dft_val))
+        dft_r2s.append(r2_score(y_val_actual, dft_val))
 
-        # Наша модель CatBoost с регуляризацией от переобучения
+        # Обучаем модель на дельту Delta_Eg с регуляризацией L2
         model = CatBoostRegressor(
             iterations=800,
             learning_rate=0.03,
@@ -65,25 +75,29 @@ def train_and_apply_delta_model(
             verbose=0,
             random_seed=42
         )
-        model.fit(X_tr, y_tr)
-        pred = model.predict(X_val)
+        model.fit(X_tr, y_tr_delta)
+        
+        # Калиброванное предсказание по канону: Eg_calibrated = Eg_DFT + Delta_Eg_pred
+        pred_delta = model.predict(X_val)
+        pred_calibrated = dft_val + pred_delta
 
-        cb_maes.append(mean_absolute_error(y_val, pred))
-        cb_r2s.append(r2_score(y_val, pred))
+        delta_maes.append(mean_absolute_error(y_val_actual, pred_calibrated))
+        delta_r2s.append(r2_score(y_val_actual, pred_calibrated))
 
-    mean_dft_mae, mean_dft_r2 = np.mean(dft_maes), np.mean(dft_r2s)
-    mean_cb_mae, mean_cb_r2 = np.mean(cb_maes), np.mean(cb_r2s)
+    mean_dft_mae, mean_dft_r2 = float(np.mean(dft_maes)), float(np.mean(dft_r2s))
+    mean_delta_mae, mean_delta_r2 = float(np.mean(delta_maes)), float(np.mean(delta_r2s))
+    improvement_pct = float((1.0 - mean_delta_mae / mean_dft_mae) * 100.0)
 
     print("\n" + "=" * 65)
-    print("  РЕЗУЛЬТАТЫ ВАЛИДАЦИИ ДЛЯ ГЛАВЫ 2 ДИПЛОМА:")
+    print("  РЕЗУЛЬТАТЫ ВАЛИДАЦИИ ДЛЯ ГЛАВЫ 2 ДИПЛОМА (Delta-Learning):")
     print("=" * 65)
-    print(f"  Бейзлайн: Сырой квантовый расчет (DFT) -> MAE: {mean_dft_mae:.3f} эВ | R²: {mean_dft_r2:.3f}")
-    print(f"  Наша модель: CatBoost + Дескрипторы   -> MAE: {mean_cb_mae:.3f} эВ | R²: {mean_cb_r2:.3f}")
-    print(f"  Улучшение точности: ошибка снижена на {(1 - mean_cb_mae/mean_dft_mae)*100:.1f}%!")
+    print(f"  Бейзлайн: Сырой квантовый расчет (DFT) -> MAE: {mean_dft_mae:.3f} эВ | R2: {mean_dft_r2:.3f}")
+    print(f"  Канонический Delta-Learning (CatBoost)-> MAE: {mean_delta_mae:.3f} эВ | R2: {mean_delta_r2:.3f}")
+    print(f"  Улучшение точности: ошибка снижена на {improvement_pct:.1f}%!")
     print("=" * 65 + "\n")
 
-    # 5. Обучаем финальную модель
-    print("  [2/3] Обучение финальной модели на всей выборке...")
+    # 5. Обучаем финальную модель дельты на всей выборке
+    print("  [2/3] Обучение финальной Delta-модели на всей экспериментальной выборке...")
     final_model = CatBoostRegressor(
         iterations=800,
         learning_rate=0.03,
@@ -92,16 +106,34 @@ def train_and_apply_delta_model(
         verbose=0,
         random_seed=42
     )
-    final_model.fit(X, y)
+    final_model.fit(X, y_delta)
 
     os.makedirs(os.path.dirname(model_output_path), exist_ok=True)
     final_model.save_model(model_output_path)
 
-    # 6. Применяем ко всей базе 22 263 материалов
-    print("  [3/3] Калибровка всех 22 263 материалов базы...")
+    # Сохраняем отчет о метриках в JSON
+    metrics_report = {
+        "model_type": "Canonical Delta-Learning (Ramakrishnan et al., 2015)",
+        "algorithm": "CatBoostRegressor",
+        "features_count": len(all_feature_cols),
+        "training_samples": len(train_df),
+        "dft_baseline_mae_ev": round(mean_dft_mae, 4),
+        "dft_baseline_r2": round(mean_dft_r2, 4),
+        "delta_ml_mae_ev": round(mean_delta_mae, 4),
+        "delta_ml_r2": round(mean_delta_r2, 4),
+        "error_reduction_pct": round(improvement_pct, 2)
+    }
+    with open(metrics_output_path, "w", encoding="utf-8") as f:
+        json.dump(metrics_report, f, indent=2, ensure_ascii=False)
+
+    # 6. Применяем калибровку ко всей базе материалов
+    print(f"  [3/3] Калибровка всех {len(df_features)} материалов базы...")
     X_full = df_features[all_feature_cols]
-    df_features["band_gap_calibrated"] = final_model.predict(X_full).clip(min=0.1)
-    df_features["delta_eg_predicted"] = df_features["band_gap_calibrated"] - df_features["band_gap_dft"]
+    
+    # 🎯 Вычисляем квантовую поправку и калиброванную запрещенную зону:
+    df_features["delta_eg_predicted"] = final_model.predict(X_full)
+    # Физическое ограничение: калиброванная зона не может быть меньше 0.1 эВ
+    df_features["band_gap_calibrated"] = (df_features["band_gap_dft"] + df_features["delta_eg_predicted"]).clip(lower=0.1)
 
     # Удаляем временную колонку, если была
     if "clean_formula" in df_features.columns:
@@ -109,13 +141,13 @@ def train_and_apply_delta_model(
 
     os.makedirs(os.path.dirname(output_calibrated_path), exist_ok=True)
     df_features.to_parquet(output_calibrated_path, index=False)
-    print(f" Калиброванные данные сохранены в: {output_calibrated_path}")
+    print(f"[+] Калиброванные данные сохранены в: {output_calibrated_path}")
 
     # Показываем топ-важных признаков (Feature Importance)
-    print("\n Топ-5 признаков, сильнее всего влияющих на поправку:")
+    print("\n Топ-5 признаков, сильнее всего влияющих на квантовую поправку Delta_Eg:")
     feat_imp = pd.Series(final_model.get_feature_importance(), index=all_feature_cols).sort_values(ascending=False)
     for feat, imp in feat_imp.head(5).items():
-        print(f"  • {feat:<35} : {imp:.2f}%")
+        print(f"  * {feat:<35} : {imp:.2f}%")
 
     return df_features
 

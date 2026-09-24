@@ -1,6 +1,9 @@
 import sys
 from pathlib import Path
 
+if hasattr(sys.stdout, 'reconfigure'):
+    sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+
 # Защита путей для кнопки Play
 sys.path.append(str(Path(__file__).resolve().parents[2]))
 
@@ -39,7 +42,7 @@ def run_pareto_screening(
     output_fig_path: str = "reports/figures/pareto_frontier.html",
     output_csv_path: str = "reports/figures/pareto_champions.csv"
 ):
-    print("  Запуск трехкритериального (3D) Парето-скрининга...")
+    print("[*] Запуск трехкритериального (3D) Парето-скрининга...")
 
     # 1. Читаем полную библиотеку через наш API
     lib = BetavoltaicLibrary()
@@ -69,10 +72,10 @@ def run_pareto_screening(
         "formula", "mp_id", "crystal_system", "material_class", "density", 
         "band_gap_calibrated", "theoretical_efficiency_pct", 
         "ed_est_ev", "radiation_resistance_score",
-        "penetration_depth_um_Ni63", "carriers_per_electron_Ni63",
-        "penetration_depth_um_H3", "carriers_per_electron_H3",
-        "penetration_depth_um_C14", "carriers_per_electron_C14",
-        "penetration_depth_um_Pm147", "carriers_per_electron_Pm147"
+        "penetration_depth_um_Ni63", "carriers_per_electron_Ni63", "t_max_ev_Ni63", "is_immune_Ni63",
+        "penetration_depth_um_H3", "carriers_per_electron_H3", "t_max_ev_H3", "is_immune_H3",
+        "penetration_depth_um_C14", "carriers_per_electron_C14", "t_max_ev_C14", "is_immune_C14",
+        "penetration_depth_um_Pm147", "carriers_per_electron_Pm147", "t_max_ev_Pm147", "is_immune_Pm147"
     ]
     cols_to_save = [c for c in cols_to_save if c in pareto_df.columns]
     pareto_df[cols_to_save].to_csv(output_csv_path, index=False)

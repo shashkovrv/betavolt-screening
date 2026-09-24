@@ -1,7 +1,11 @@
 {
-  "dataset_size": 683,
-  "num_features": 132,
-  "catboost_mae_cv": 0.5555,
-  "catboost_r2_cv": 0.2932,
-  "dummy_mae_cv": 0.7021
+  "model_type": "Canonical Delta-Learning (Ramakrishnan et al., 2015)",
+  "algorithm": "CatBoostRegressor",
+  "features_count": 135,
+  "training_samples": 683,
+  "dft_baseline_mae_ev": 0.8708,
+  "dft_baseline_r2": 0.4739,
+  "delta_ml_mae_ev": 0.5534,
+  "delta_ml_r2": 0.7113,
+  "error_reduction_pct": 36.45
 }

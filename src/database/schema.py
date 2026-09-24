@@ -41,18 +41,26 @@ CREATE TABLE IF NOT EXISTS betavoltaic_performance (
     -- Изотоп Ni-63
     carriers_per_electron_Ni63 REAL,
     penetration_depth_um_Ni63 REAL,
+    t_max_ev_Ni63 REAL,
+    is_immune_Ni63 INTEGER,
     
     -- Изотоп H-3 (Тритий)
     carriers_per_electron_H3 REAL,
     penetration_depth_um_H3 REAL,
+    t_max_ev_H3 REAL,
+    is_immune_H3 INTEGER,
     
     -- Изотоп C-14
     carriers_per_electron_C14 REAL,
     penetration_depth_um_C14 REAL,
+    t_max_ev_C14 REAL,
+    is_immune_C14 INTEGER,
     
     -- Изотоп Pm-147 (Прометий)
     carriers_per_electron_Pm147 REAL,
     penetration_depth_um_Pm147 REAL,
+    t_max_ev_Pm147 REAL,
+    is_immune_Pm147 INTEGER,
     
     FOREIGN KEY (mp_id) REFERENCES materials (mp_id)
 );

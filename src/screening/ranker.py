@@ -35,10 +35,10 @@ class BetavoltaicLibrary:
             m.material_class, m.is_viable,
             e.band_gap_dft, e.delta_eg_predicted, e.band_gap_calibrated, e.eps_ehp_ev, e.Voc_est_v, e.theoretical_efficiency_pct,
             p.ed_est_ev, p.radiation_resistance_score,
-            p.carriers_per_electron_Ni63, p.penetration_depth_um_Ni63,
-            p.carriers_per_electron_H3, p.penetration_depth_um_H3,
-            p.carriers_per_electron_C14, p.penetration_depth_um_C14,
-            p.carriers_per_electron_Pm147, p.penetration_depth_um_Pm147
+            p.carriers_per_electron_Ni63, p.penetration_depth_um_Ni63, p.t_max_ev_Ni63, p.is_immune_Ni63,
+            p.carriers_per_electron_H3, p.penetration_depth_um_H3, p.t_max_ev_H3, p.is_immune_H3,
+            p.carriers_per_electron_C14, p.penetration_depth_um_C14, p.t_max_ev_C14, p.is_immune_C14,
+            p.carriers_per_electron_Pm147, p.penetration_depth_um_Pm147, p.t_max_ev_Pm147, p.is_immune_Pm147
         FROM materials m
         JOIN electronic_properties e ON m.mp_id = e.mp_id
         JOIN betavoltaic_performance p ON m.mp_id = p.mp_id
@@ -53,10 +53,10 @@ class BetavoltaicLibrary:
             m.formula, m.mp_id, m.crystal_system, m.density, m.material_class, m.is_viable,
             e.band_gap_dft, e.delta_eg_predicted, e.band_gap_calibrated, e.theoretical_efficiency_pct,
             p.ed_est_ev, p.radiation_resistance_score,
-            p.penetration_depth_um_Ni63, p.carriers_per_electron_Ni63,
-            p.penetration_depth_um_H3, p.carriers_per_electron_H3,
-            p.penetration_depth_um_C14, p.carriers_per_electron_C14,
-            p.penetration_depth_um_Pm147, p.carriers_per_electron_Pm147
+            p.penetration_depth_um_Ni63, p.carriers_per_electron_Ni63, p.is_immune_Ni63,
+            p.penetration_depth_um_H3, p.carriers_per_electron_H3, p.is_immune_H3,
+            p.penetration_depth_um_C14, p.carriers_per_electron_C14, p.is_immune_C14,
+            p.penetration_depth_um_Pm147, p.carriers_per_electron_Pm147, p.is_immune_Pm147
         FROM materials m
         JOIN electronic_properties e ON m.mp_id = e.mp_id
         JOIN betavoltaic_performance p ON m.mp_id = p.mp_id
@@ -69,8 +69,8 @@ class BetavoltaicLibrary:
     def get_top_candidates(
         self, 
         isotope: str = "Ni-63", 
-        min_efficiency: float = 18.0, 
-        min_radiation_score: float = 25.0,
+        min_efficiency: float = 12.0, 
+        min_radiation_score: float = 20.0,
         only_viable: bool = True,
         top_k: int = 10
     ) -> pd.DataFrame:
@@ -91,7 +91,8 @@ class BetavoltaicLibrary:
             ROUND(p.ed_est_ev, 1) as Ed_eV, 
             ROUND(p.radiation_resistance_score, 1) as Rad_Score,
             ROUND(p.penetration_depth_um_{clean_tag}, 2) as Depth_um,
-            CAST(p.carriers_per_electron_{clean_tag} AS INTEGER) as Pairs_per_e
+            CAST(p.carriers_per_electron_{clean_tag} AS INTEGER) as Pairs_per_e,
+            p.is_immune_{clean_tag} as Is_Immune
         FROM materials m
         JOIN electronic_properties e ON m.mp_id = e.mp_id
         JOIN betavoltaic_performance p ON m.mp_id = p.mp_id

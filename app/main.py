@@ -36,12 +36,20 @@ COLUMN_MAPPING = {
     "radiation_resistance_score": "Индекс стойкости (0–100)",
     "penetration_depth_um_Ni63": "Глубина пробега Ni-63 (мкм)",
     "carriers_per_electron_Ni63": "Пар на электрон Ni-63",
+    "t_max_ev_Ni63": "T_max отдачи Ni-63 (эВ)",
+    "is_immune_Ni63": "Иммунитет к Ni-63",
     "penetration_depth_um_H3": "Глубина пробега H-3 (мкм)",
     "carriers_per_electron_H3": "Пар на электрон H-3",
+    "t_max_ev_H3": "T_max отдачи H-3 (эВ)",
+    "is_immune_H3": "Иммунитет к H-3",
     "penetration_depth_um_C14": "Глубина пробега C-14 (мкм)",
     "carriers_per_electron_C14": "Пар на электрон C-14",
+    "t_max_ev_C14": "T_max отдачи C-14 (эВ)",
+    "is_immune_C14": "Иммунитет к C-14",
     "penetration_depth_um_Pm147": "Глубина пробега Pm-147 (мкм)",
     "carriers_per_electron_Pm147": "Пар на электрон Pm-147",
+    "t_max_ev_Pm147": "T_max отдачи Pm-147 (эВ)",
+    "is_immune_Pm147": "Иммунитет к Pm-147",
 }
 
 # Кэшируем загрузку данных из SQLite
@@ -64,7 +72,7 @@ st.caption("Магистерская диссертация: «Разработ�
 col1, col2, col3, col4 = st.columns(4)
 col1.metric("Всего материалов в базе", f"{len(df):,}")
 col2.metric("Стойких полупроводников", f"{(df['is_viable'] == 1).sum():,}")
-col3.metric("Точность ML-калибровки R²", "0.691", delta="+35.7% к DFT")
+col3.metric("Точность ML-калибровки R²", "0.711", delta="+36.5% к DFT")
 col4.metric("Доступных изотопов", "4 (Ni-63, H-3, C-14, Pm-147)")
 
 st.divider()
@@ -76,7 +84,7 @@ selected_isotope = st.sidebar.selectbox(
     "Радиоактивный изотоп:",
     ["Ni-63", "H-3", "C-14", "Pm-147"],
     index=0,
-    help="Радиоактивный источник для расчета пробега бета-частиц и ионизационных потерь."
+    help="Радиоактивный источник для расчета пробега бета-частиц, энерговыделения и кинематики отдачи."
 )
 
 clean_tag = selected_isotope.replace("-", "")
@@ -85,7 +93,7 @@ clean_tag = selected_isotope.replace("-", "")
 only_viable = st.sidebar.checkbox(
     "Только химически стойкие полупроводники",
     value=True,
-    help="Исключает растворимые соли (галогениды), гидриды, гидроксиды, токсичные цианиды и нестабильные ацетилиды"
+    help="Исключает растворимые соли (галогениды), гидриды, гидроксиды, токсичные цианиды, нестабильные ацетилиды и изолирующую диэлектрическую керамику"
 )
 
 # Фильтр по классам полупроводников
@@ -104,9 +112,9 @@ selected_class = st.sidebar.selectbox(
 )
 
 # Ползунки фильтрации
-min_eff = st.sidebar.slider("Минимальный теоретический КПД (%)", 5.0, 25.0, 18.0, 0.5)
+min_eff = st.sidebar.slider("Минимальный теоретический КПД (%)", 1.0, 22.0, 12.0, 0.5)
 min_rad = st.sidebar.slider("Минимальный индекс радиационной стойкости", 0.0, 100.0, 20.0, 5.0)
-gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 10.0, (1.2, 6.0), 0.1)
+gap_range = st.sidebar.slider("Диапазон запрещенной зоны Eg (эВ)", 0.5, 8.0, (1.1, 5.5), 0.1)
 
 # Фильтр по максимальной глубине пробега
 depth_col_curr = f"penetration_depth_um_{clean_tag}"
@@ -234,7 +242,12 @@ with tab2:
         c_m3.metric("Калиброванная зона Eg", f"{mat_row['band_gap_calibrated']:.2f} эВ", delta=f"DFT: {mat_row['band_gap_dft']:.2f} эВ")
         c_m4.metric(f"Глубина пробега ({selected_isotope})", f"{mat_row.get(f'penetration_depth_um_{clean_tag}', 0.0):.2f} мкм")
         
-        st.info(f"Материал **{chosen_mat}** ({CRYSTAL_SYSTEMS_RU.get(mat_row['crystal_system'], mat_row['crystal_system'])} сингония, класс: {mat_row.get('material_class', 'Полупроводник')}, плотность {mat_row['density']:.2f} г/см³). Порог образования радиационных дефектов $E_d \\approx {mat_row['ed_est_ev']:.1f}$ эВ (модель Келли–Гроувса). При поглощении одного бета-электрона изотопа {selected_isotope} генерируется в среднем **{int(mat_row.get(f'carriers_per_electron_{clean_tag}', 0))}** электронно-дырочных пар.")
+        t_max_val = mat_row.get(f't_max_ev_{clean_tag}', 0.0)
+        ed_val = mat_row.get('ed_est_ev', 25.0)
+        is_immune_val = (t_max_val < ed_val)
+        immune_str = "Полная радиационная неуязвимость ($T_{max} < E_d$, упругое смещение узлов невозможно)" if is_immune_val else f"Возможно образование дефектов смещения ($T_{{max}} = {t_max_val:.1f} > E_d = {ed_val:.1f}$ эВ)"
+
+        st.info(f"Материал **{chosen_mat}** ({CRYSTAL_SYSTEMS_RU.get(mat_row['crystal_system'], mat_row['crystal_system'])} сингония, класс: {mat_row.get('material_class', 'Полупроводник')}, плотность {mat_row['density']:.2f} г/см³). Порог образования радиационных дефектов $E_d \\approx {ed_val:.1f}$ эВ (модель Келли–Гроувса). Макс. энергия отдачи ядра для {selected_isotope}: $T_{{max}} \\approx {t_max_val:.1f}$ эВ. **Статус стойкости:** {immune_str}. При поглощении одного бета-электрона изотопа {selected_isotope} генерируется в среднем **{int(mat_row.get(f'carriers_per_electron_{clean_tag}', 0))}** электронно-дырочных пар.")
 
 # -------------------------------------------------------------
 # ВКЛАДКА 3: 3D ПРОСТРАНСТВО СВОЙСТВ

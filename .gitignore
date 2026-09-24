@@ -22,4 +22,5 @@ catboost_info/
 .agents/
 AGENTS.md
 
-
+# Generated HTML figures
+reports/figures/*.html

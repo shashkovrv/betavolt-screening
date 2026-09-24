@@ -1,0 +1,9 @@
+# GitHub Linguist configuration to ensure repository is properly identified as Python
+# Ignore generated Plotly standalone HTMLs, reports, and documentation from language stats
+
+*.html linguist-vendored=true
+*.html linguist-generated=true
+reports/** linguist-documentation=true
+reports/figures/** linguist-generated=true
+notebooks/** linguist-documentation=true
+docs/** linguist-documentation=true
